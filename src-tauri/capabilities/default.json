@@ -1,0 +1,26 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "shell:default",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "run-wg",
+          "cmd": "wireguard.exe",
+          "args": true
+        },
+        {
+          "name": "check-ip",
+          "cmd": "curl",
+          "args": ["ifconfig.me"]
+        }
+      ]
+    }
+  ]
+}
