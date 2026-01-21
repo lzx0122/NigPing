@@ -11,40 +11,38 @@ const close = () => appWindow.close();
 
 <template>
   <div
-    class="h-11 bg-white/5 backdrop-blur-xl border-b border-white/10 flex items-center justify-between select-none shadow-sm"
+    class="h-10 bg-black flex items-center justify-between select-none border-b border-zinc-900"
     data-tauri-drag-region
   >
     <!-- Left: App branding -->
-    <div class="flex items-center gap-2.5 pl-4" data-tauri-drag-region>
-      <div
-        class="w-5 h-5 rounded-md bg-gradient-to-br from-amber-400 via-orange-500 to-red-500 flex items-center justify-center shadow-lg shadow-orange-500/20"
-      >
-        <span class="text-[10px] font-black text-white tracking-tight">N</span>
+    <div class="flex items-center gap-2 pl-4" data-tauri-drag-region>
+      <div class="w-4 h-4 rounded-sm bg-white flex items-center justify-center">
+        <span class="text-[10px] font-black text-black leading-none">N</span>
       </div>
-      <span class="text-sm font-semibold text-zinc-300 tracking-wide"
+      <span class="text-xs font-bold text-zinc-400 tracking-wider uppercase"
         >NigPing</span
       >
     </div>
 
-    <!-- Right: Window controls (macOS/Spotify style positioning, Windows icons) -->
+    <!-- Right: Window controls -->
     <div class="flex items-center h-full">
       <button
         @click="minimize"
-        class="h-full w-12 flex items-center justify-center text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/80 transition-all duration-150"
+        class="h-full w-12 flex items-center justify-center text-zinc-500 hover:text-white hover:bg-zinc-900 transition-colors"
       >
-        <Minus class="w-4 h-4" :stroke-width="1.5" />
+        <Minus class="w-4 h-4" />
       </button>
       <button
         @click="toggleMaximize"
-        class="h-full w-12 flex items-center justify-center text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/80 transition-all duration-150"
+        class="h-full w-12 flex items-center justify-center text-zinc-500 hover:text-white hover:bg-zinc-900 transition-colors"
       >
-        <Square class="w-3.5 h-3.5" :stroke-width="1.5" />
+        <Square class="w-3.5 h-3.5" />
       </button>
       <button
         @click="close"
-        class="h-full w-12 flex items-center justify-center text-zinc-500 hover:text-white hover:bg-red-600 transition-all duration-150"
+        class="h-full w-12 flex items-center justify-center text-zinc-500 hover:text-white hover:bg-red-600 transition-colors"
       >
-        <X class="w-4 h-4" :stroke-width="1.5" />
+        <X class="w-4 h-4" />
       </button>
     </div>
   </div>
