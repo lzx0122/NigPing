@@ -1,4 +1,4 @@
-use windows_sys::Win32::Foundation::{GetLastError, LUID};
+use windows_sys::Win32::Foundation::{GetLastError, LUID, CloseHandle};
 use windows_sys::Win32::Security::{
     AdjustTokenPrivileges, LookupPrivilegeValueW, TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES,
     TOKEN_QUERY, SE_PRIVILEGE_ENABLED, LUID_AND_ATTRIBUTES,
@@ -7,23 +7,17 @@ use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken}
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
 
-pub fn enable_se_restore_privilege() -> Result<(), String> {
+/// Enable a specific Windows privilege for the current process
+fn enable_privilege(privilege_name: &str, token_handle: isize) -> Result<(), String> {
     unsafe {
-        let mut token_handle = 0;
-        let process_handle = GetCurrentProcess();
-        
-        if OpenProcessToken(process_handle, TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &mut token_handle) == 0 {
-            return Err(format!("OpenProcessToken failed: {}", GetLastError()));
-        }
-
         let mut luid: LUID = std::mem::zeroed();
-        let privilege_name: Vec<u16> = OsStr::new("SeRestorePrivilege")
+        let name_wide: Vec<u16> = OsStr::new(privilege_name)
             .encode_wide()
             .chain(std::iter::once(0))
             .collect();
 
-        if LookupPrivilegeValueW(std::ptr::null(), privilege_name.as_ptr(), &mut luid) == 0 {
-            return Err(format!("LookupPrivilegeValueW failed: {}", GetLastError()));
+        if LookupPrivilegeValueW(std::ptr::null(), name_wide.as_ptr(), &mut luid) == 0 {
+            return Err(format!("LookupPrivilegeValueW failed for {}: {}", privilege_name, GetLastError()));
         }
 
         let mut token_privileges = TOKEN_PRIVILEGES {
@@ -43,20 +37,73 @@ pub fn enable_se_restore_privilege() -> Result<(), String> {
             std::ptr::null_mut(),
         ) == 0
         {
-            return Err(format!("AdjustTokenPrivileges failed: {}", GetLastError()));
+            return Err(format!("AdjustTokenPrivileges failed for {}: {}", privilege_name, GetLastError()));
         }
-        
-        // Even if AdjustTokenPrivileges returns non-zero, we should check GetLastError for ERROR_NOT_ALL_ASSIGNED.
-        // However, for this specific case, if we proceed, it might work if the user is Admin.
         
         let err = GetLastError();
         if err != 0 {
              // 1300 = ERROR_NOT_ALL_ASSIGNED
              if err == 1300 {
-                 return Err("雖然嘗試啟用權限，但失敗了 (ERROR_NOT_ALL_ASSIGNED)。請確認您是真的以系統管理員身分執行程式。".to_string());
+                 return Err(format!("{}: ERROR_NOT_ALL_ASSIGNED (權限未被授予)", privilege_name));
              }
         }
     }
 
     Ok(())
+}
+
+/// Enable all privileges required for WireGuard to create named pipes in protected namespace
+pub fn enable_se_restore_privilege() -> Result<(), String> {
+    unsafe {
+        let mut token_handle = 0;
+        let process_handle = GetCurrentProcess();
+        
+        if OpenProcessToken(process_handle, TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &mut token_handle) == 0 {
+            return Err(format!("OpenProcessToken failed: {}", GetLastError()));
+        }
+
+        // List of privileges required for WireGuard named pipe access
+        // SeRestorePrivilege: Required for certain file operations
+        // SeBackupPrivilege: Required for backup operations and protected namespace access
+        // SeCreateSymbolicLinkPrivilege: Often required for protected pipes
+        // SeSecurityPrivilege: Required for accessing security descriptors
+        let required_privileges = [
+            "SeRestorePrivilege",
+            "SeBackupPrivilege", 
+            "SeCreateSymbolicLinkPrivilege",
+            "SeSecurityPrivilege",
+        ];
+
+        let mut errors = Vec::new();
+        let mut success_count = 0;
+
+        for privilege in &required_privileges {
+            match enable_privilege(privilege, token_handle) {
+                Ok(_) => {
+                    println!("✓ 已啟用權限: {}", privilege);
+                    success_count += 1;
+                }
+                Err(e) => {
+                    println!("✗ 無法啟用權限 {}: {}", privilege, e);
+                    errors.push(format!("{}: {}", privilege, e));
+                }
+            }
+        }
+
+        // Clean up
+        CloseHandle(token_handle);
+
+        // Return error only if ALL privileges failed
+        if success_count == 0 {
+            return Err(format!("所有權限啟用失敗:\n{}", errors.join("\n")));
+        }
+
+        // Warn if some privileges failed but at least one succeeded
+        if !errors.is_empty() {
+            println!("警告: {} 個權限啟用失敗，但已啟用 {} 個，嘗試繼續...", 
+                     errors.len(), success_count);
+        }
+
+        Ok(())
+    }
 }
