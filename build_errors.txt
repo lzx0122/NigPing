@@ -1,0 +1,79 @@
+﻿cargo :    Compiling nigping v0.1.0 (C:\Users\asus\Desktop\Project\NigPing\src-ta
+uri)
+位於 線路:1 字元:1
++ cargo build 2>&1 | Out-File -FilePath "C:\Users\asus\Desktop\Project\ ...
++ ~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling ni...Ping\src-tauri):S 
+   tring) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+warning: unused import: `std::collections::HashMap`
+ --> src\network_monitor.rs:2:5
+  |
+2 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `SystemTime`
+ --> src\network_monitor.rs:5:27
+  |
+5 | use std::time::{Duration, SystemTime};
+  |                           ^^^^^^^^^^
+
+warning: unused import: `tokio::task`
+ --> src\network_monitor.rs:6:5
+  |
+6 | use tokio::task;
+  |     ^^^^^^^^^^^
+
+warning: unused imports: `MIB_TCPROW_OWNER_PID` and `MIB_UDPROW_OWNER_PID`
+ --> src\network_monitor.rs:8:47
+  |
+8 |     GetExtendedTcpTable, GetExtendedUdpTable, MIB_TCPROW_OWNER_PID, MIB_TCPTA
+BLE_OWNER_PID,
+  |                                               ^^^^^^^^^^^^^^^^^^^^
+9 |     MIB_UDPROW_OWNER_PID, MIB_UDPTABLE_OWNER_PID, TCP_TABLE_OWNER_PID_ALL,
+  |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: unnecessary parentheses around function argument
+  --> src\network_monitor.rs:59:18
+   |
+59 |     u16::from_be((port as u16))
+   |                  ^           ^
+   |
+   = note: `#[warn(unused_parens)]` (part of `#[warn(unused)]`) on by default
+help: remove these parentheses
+   |
+59 -     u16::from_be((port as u16))
+59 +     u16::from_be(port as u16 )
+   |
+
+error[E0599]: no method named `is_err` found for type `u32` in the current scope
+   --> src\network_monitor.rs:149:19
+    |
+149 |         if result.is_err() || result.unwrap() != 0 {
+    |                   ^^^^^^ method not found in `u32`
+
+error[E0599]: no method named `unwrap` found for type `u32` in the current scope
+   --> src\network_monitor.rs:149:38
+    |
+149 |         if result.is_err() || result.unwrap() != 0 {
+    |                                      ^^^^^^ method not found in `u32`
+
+error[E0599]: no method named `is_err` found for type `u32` in the current scope
+   --> src\network_monitor.rs:217:19
+    |
+217 |         if result.is_err() || result.unwrap() != 0 {
+    |                   ^^^^^^ method not found in `u32`
+
+error[E0599]: no method named `unwrap` found for type `u32` in the current scope
+   --> src\network_monitor.rs:217:38
+    |
+217 |         if result.is_err() || result.unwrap() != 0 {
+    |                                      ^^^^^^ method not found in `u32`
+
+For more information about this error, try `rustc --explain E0599`.
+warning: `nigping` (lib) generated 5 warnings
+error: could not compile `nigping` (lib) due to 4 previous errors; 5 warnings emi
+tted

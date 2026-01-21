@@ -20,6 +20,7 @@ import {
 import { GAMES, type Game, type Server } from "@/data/games";
 import ServerGlobe from "@/components/ServerGlobe.vue";
 import TitleBar from "@/components/TitleBar.vue";
+import ServerDetection from "@/components/ServerDetection.vue";
 
 // === 狀態管理 ===
 type ViewState = "home" | "details";
@@ -387,6 +388,14 @@ const handleDisconnect = async () => {
                     <ShieldCheck class="w-3 h-3" />
                     本連線採用 WireGuard 加密技術，保障您的隱私安全
                   </p>
+                </div>
+
+                <!-- Server Detection Component -->
+                <div class="mt-6">
+                  <ServerDetection
+                    v-if="selectedGame"
+                    :process-name="selectedGame.processName"
+                  />
                 </div>
               </div>
             </div>

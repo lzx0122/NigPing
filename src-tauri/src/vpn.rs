@@ -286,6 +286,58 @@ pub async fn connect_korea<R: Runtime>(app: AppHandle<R>, config_content: String
     Ok("韓服連線成功！GLHF!".to_string())
 }
 
+/// Add a single IP route to the VPN adapter
+/// This function can be called by network_monitor to add detected game server IPs
+pub fn add_route_to_vpn(ip: &str) -> Result<String, String> {
+    // Get the interface index for NigPingAdapter
+    let if_index_output = Command::new("netsh")
+        .args(["interface", "ipv4", "show", "interfaces"])
+        .output()
+        .map_err(|e| format!("無法獲取介面索引: {}", e))?;
+
+    let if_output_text = String::from_utf8_lossy(&if_index_output.stdout);
+    let mut interface_idx = None;
+    
+    // Parse output to find interface index
+    for line in if_output_text.lines() {
+        if line.contains(INTERFACE_NAME) {
+            // Extract the interface index (first number in the line)
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if !parts.is_empty() {
+                if let Ok(idx) = parts[0].parse::<u32>() {
+                    interface_idx = Some(idx);
+                    break;
+                }
+            }
+        }
+    }
+
+    let if_idx = interface_idx.ok_or("VPN 介面未找到，請先連線 VPN".to_string())?;
+    
+    // Add route for the IP (use /32 for single IP)
+    let route_output = Command::new("route")
+        .args([
+            "add",
+            ip,
+            "mask",
+            "255.255.255.255",
+            "0.0.0.0",
+            "IF",
+            &if_idx.to_string(),
+            "METRIC",
+            "1"
+        ])
+        .output()
+        .map_err(|e| format!("無法加入路由: {}", e))?;
+
+    if !route_output.status.success() {
+        let err_msg = String::from_utf8_lossy(&route_output.stderr);
+        return Err(format!("路由加入失敗: {}", err_msg));
+    }
+
+    Ok(format!("已將 {} 加入 VPN 路由", ip))
+}
+
 #[tauri::command]
 pub fn disconnect_vpn() -> Result<String, String> {
     println!("正在斷開 VPN...");
