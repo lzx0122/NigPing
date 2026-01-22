@@ -134,7 +134,11 @@
               {{ formatBytes(maxChartValue) }}/s
             </div>
 
-            <svg class="w-full h-full" preserveAspectRatio="none">
+            <svg
+              class="w-full h-full"
+              preserveAspectRatio="none"
+              viewBox="0 0 100 100"
+            >
               <defs>
                 <!-- Upload Gradient (Purple) -->
                 <linearGradient id="gradSend" x1="0" x2="0" y1="0" y2="1">
@@ -313,7 +317,7 @@ const statusType = ref<"info" | "success" | "error">("info");
 const addingRoute = ref<string | null>(null);
 
 // History State
-const MAX_HISTORY = 30; // Keep last 30 data points
+const MAX_HISTORY = 60; // Keep last 60 data points
 interface DataPoint {
   time: number;
   send: number;
