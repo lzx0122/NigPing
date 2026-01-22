@@ -4,7 +4,7 @@
   >
     <!-- Header with Monitoring Toggle (Compact) -->
     <div
-      class="flex items-center justify-between p-3 border-b border-zinc-800 bg-zinc-900/20"
+      class="flex items-center justify-between p-5 border-b border-zinc-800 bg-zinc-900/20"
     >
       <div class="flex items-center gap-3">
         <div
@@ -19,19 +19,18 @@
           />
         </div>
         <div class="flex flex-col">
-          <h3 class="text-sm font-bold text-white tracking-tight leading-none">
+          <h3
+            class="text-base font-bold text-white tracking-tight leading-none"
+          >
             伺服器偵測
           </h3>
-          <p class="text-[10px] text-zinc-500 font-medium leading-tight mt-0.5">
-            自動識別遊戲連線
-          </p>
         </div>
       </div>
 
       <button
         @click="toggleMonitoring"
         :disabled="isLoading"
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-all duration-200 border"
+        class="flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition-all duration-200 border"
         :class="[
           isMonitoring
             ? 'bg-white text-black border-white hover:bg-zinc-200 hover:border-zinc-200 shadow-sm'
@@ -47,7 +46,7 @@
     <!-- Status Banner (Compact) -->
     <div
       v-if="statusMessage"
-      class="flex items-center gap-2 px-3 py-1.5 border-b border-zinc-800/50 text-xs font-medium"
+      class="flex items-center gap-2 px-5 py-2 border-b border-zinc-800/50 text-sm font-medium"
       :class="{
         'bg-zinc-900/50 text-zinc-300': statusType === 'info',
         'bg-zinc-900/50 text-white': statusType === 'success',
@@ -68,44 +67,46 @@
     </div>
 
     <!-- Detected Servers List (Compact) -->
-    <div v-if="detectedServers.length > 0" class="p-3 flex flex-col gap-2">
+    <div v-if="detectedServers.length > 0" class="p-5 flex flex-col gap-3">
       <!-- Primary Server (Compact Layout) -->
       <div v-if="primaryServer" class="flex flex-col gap-2">
         <div
-          class="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-zinc-500 px-1"
+          class="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-zinc-500 px-1"
         >
           <span class="flex items-center gap-1.5"
-            ><Trophy class="w-3 h-3" /> 主要伺服器</span
+            ><Trophy class="w-4 h-4" /> 主要伺服器</span
           >
           <span class="font-mono">{{ primaryServer.protocol }}</span>
         </div>
 
         <div
-          class="group relative flex flex-col p-3 rounded bg-zinc-900/40 border border-zinc-800 hover:border-zinc-600 hover:bg-zinc-900/60 transition-all gap-3"
+          class="group relative flex flex-col p-5 rounded bg-zinc-900/40 border border-zinc-800 hover:border-zinc-600 hover:bg-zinc-900/60 transition-all gap-4"
         >
           <!-- Top Row: IP & Info -->
           <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3 overflow-hidden">
+            <div class="flex items-center gap-4 overflow-hidden">
               <div
-                class="w-8 h-8 rounded bg-zinc-800 flex items-center justify-center border border-zinc-700 shrink-0"
+                class="w-10 h-10 rounded bg-zinc-800 flex items-center justify-center border border-zinc-700 shrink-0"
               >
-                <Globe class="w-4 h-4 text-zinc-300" />
+                <Globe class="w-5 h-5 text-zinc-300" />
               </div>
               <div class="flex flex-col overflow-hidden">
                 <div class="flex items-baseline gap-1.5">
                   <span
-                    class="text-sm font-mono font-bold text-white truncate"
+                    class="text-lg font-mono font-bold text-white truncate"
                     >{{ primaryServer.ip }}</span
                   >
-                  <span class="text-[10px] font-mono text-zinc-500"
+                  <span class="text-xs font-mono text-zinc-500"
                     >:{{ primaryServer.port }}</span
                   >
                 </div>
-                <div class="flex items-center gap-2 text-[10px] text-zinc-400">
+                <div class="flex items-center gap-2 text-xs text-zinc-400">
                   <span
                     v-if="primaryServer.country"
                     class="truncate flex items-center gap-1"
-                    ><MapPin class="w-3 h-3" />{{ primaryServer.country }}</span
+                    ><MapPin class="w-3.5 h-3.5" />{{
+                      primaryServer.country
+                    }}</span
                   >
                 </div>
               </div>
@@ -122,100 +123,121 @@
             </button>
           </div>
 
-          <!-- Middle: Sparkline History -->
+          <!-- Middle: Chart Visualization -->
           <div
-            class="h-10 w-full bg-zinc-950/50 rounded border border-zinc-800/50 relative overflow-hidden flex items-end"
+            class="h-24 w-full bg-zinc-950/50 rounded border border-zinc-800/50 relative overflow-hidden flex items-end"
           >
+            <!-- Max Value Indicator -->
+            <div
+              class="absolute top-1 left-1 text-[9px] font-mono text-zinc-600 bg-zinc-900/80 px-1 rounded z-10"
+            >
+              {{ formatBytes(maxChartValue) }}/s
+            </div>
+
             <svg class="w-full h-full" preserveAspectRatio="none">
-              <!-- Send Rate Line -->
+              <defs>
+                <!-- Upload Gradient (Purple) -->
+                <linearGradient id="gradSend" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stop-color="#a855f7" stop-opacity="0.5" />
+                  <stop offset="100%" stop-color="#a855f7" stop-opacity="0" />
+                </linearGradient>
+                <!-- Download Gradient (Cyan) -->
+                <linearGradient id="gradRecv" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.5" />
+                  <stop offset="100%" stop-color="#06b6d4" stop-opacity="0" />
+                </linearGradient>
+              </defs>
+
+              <!-- Grid Lines -->
+              <line
+                x1="0"
+                y1="50%"
+                x2="100%"
+                y2="50%"
+                stroke="#27272a"
+                stroke-width="1"
+                stroke-dasharray="4 4"
+              />
+              <line
+                x1="0"
+                y1="25%"
+                x2="100%"
+                y2="25%"
+                stroke="#27272a"
+                stroke-width="1"
+                stroke-dasharray="4 4"
+                opacity="0.5"
+              />
+              <line
+                x1="0"
+                y1="75%"
+                x2="100%"
+                y2="75%"
+                stroke="#27272a"
+                stroke-width="1"
+                stroke-dasharray="4 4"
+                opacity="0.5"
+              />
+
+              <!-- Send Rate Area (Bottom layer) -->
+              <path :d="sendPathArea" fill="url(#gradSend)" stroke="none" />
               <path
-                :d="sendPath"
+                :d="sendPathLine"
                 fill="none"
-                stroke="#a1a1aa"
+                stroke="#a855f7"
                 stroke-width="1.5"
                 vector-effect="non-scaling-stroke"
-                class="opacity-50"
               />
-              <!-- Recv Rate Line -->
+
+              <!-- Recv Rate Area (Top layer) -->
+              <path :d="recvPathArea" fill="url(#gradRecv)" stroke="none" />
               <path
-                :d="recvPath"
+                :d="recvPathLine"
                 fill="none"
-                stroke="#fff"
+                stroke="#06b6d4"
                 stroke-width="1.5"
                 vector-effect="non-scaling-stroke"
               />
             </svg>
+
             <div
-              class="absolute top-1 right-1 text-[9px] font-mono text-zinc-600 bg-zinc-950/80 px-1 rounded"
+              class="absolute top-2 right-2 text-[10px] font-mono text-zinc-600 bg-zinc-950/80 px-1.5 rounded"
             >
               traffic history
             </div>
           </div>
 
-          <!-- Bottom Row: Stats Grid -->
-          <div class="grid grid-cols-4 gap-2 pt-1 border-t border-zinc-800/50">
+          <!-- Bottom Row: Stats Grid (Upload & Download only) -->
+          <div class="grid grid-cols-2 gap-2 pt-1 border-t border-zinc-800/50">
             <div class="flex flex-col">
-              <span class="text-[9px] text-zinc-500 uppercase">Upload</span>
-              <span class="text-xs font-mono text-zinc-300"
+              <div class="flex items-center gap-1.5 mb-0.5">
+                <div class="w-1.5 h-1.5 rounded-full bg-purple-500"></div>
+                <span class="text-[10px] text-zinc-500 uppercase font-bold"
+                  >Upload</span
+                >
+              </div>
+              <span class="text-sm font-mono text-purple-200"
                 >{{ formatBytes(primaryServer.send_rate) }}/s</span
               >
             </div>
             <div class="flex flex-col">
-              <span class="text-[9px] text-zinc-500 uppercase">Download</span>
-              <span class="text-xs font-mono text-white"
+              <div class="flex items-center gap-1.5 mb-0.5">
+                <div
+                  class="w-1.5 h-1.5 rounded-full bg-cyan-500 shadow-[0_0_4px_cyan]"
+                ></div>
+                <span class="text-[10px] text-zinc-500 uppercase font-bold"
+                  >Download</span
+                >
+              </div>
+              <span class="text-sm font-mono text-cyan-200"
                 >{{ formatBytes(primaryServer.recv_rate) }}/s</span
               >
             </div>
-            <div class="flex flex-col">
-              <span class="text-[9px] text-zinc-500 uppercase">Ping</span>
-              <span class="text-xs font-mono text-zinc-400">--</span>
-            </div>
-            <div class="flex flex-col">
-              <span class="text-[9px] text-zinc-500 uppercase">Loss</span>
-              <span class="text-xs font-mono text-zinc-400">0%</span>
-            </div>
           </div>
         </div>
       </div>
 
-      <!-- Others (Compact) -->
-      <div v-if="otherServers.length > 0" class="flex flex-col gap-1 mt-1">
-        <button
-          @click="showMore = !showMore"
-          class="flex items-center gap-2 text-[10px] font-medium text-zinc-600 hover:text-zinc-400 transition-colors py-1 px-1"
-        >
-          <ChevronDown
-            :class="{ 'rotate-180': showMore }"
-            class="w-3 h-3 transition-transform duration-200"
-          />
-          <span>{{
-            showMore ? "收起" : `其他 ${otherServers.length} 個連線`
-          }}</span>
-        </button>
-
-        <div v-if="showMore" class="flex flex-col gap-1.5 pl-1">
-          <div
-            v-for="server in otherServers"
-            :key="server.ip + server.port"
-            class="flex items-center justify-between p-2 rounded border border-zinc-800/30 bg-zinc-900/10 hover:bg-zinc-900/30 hover:border-zinc-700/50 transition-all text-xs"
-          >
-            <div class="flex items-center gap-2 overflow-hidden">
-              <div
-                class="w-1 h-1 rounded-full bg-zinc-500 shrink-0"
-                :class="{
-                  'bg-white shadow-[0_0_4px_white]': server.is_game_server,
-                }"
-              ></div>
-              <div class="flex items-baseline gap-1 truncate">
-                <span class="font-mono text-zinc-300">{{ server.ip }}</span>
-              </div>
-            </div>
-            <div class="font-mono text-zinc-500">
-              {{ formatBytes(server.send_rate + server.recv_rate) }}/s
-            </div>
-          </div>
-        </div>
-      </div>
+      <!-- Removed "Other Connections" section as per user request -->
     </div>
 
     <!-- Empty State (Compact) -->
@@ -261,7 +283,6 @@ import {
   Loader2,
   Target,
   Trophy,
-  ChevronDown,
 } from "lucide-vue-next";
 
 interface DetectedServer {
@@ -272,6 +293,7 @@ interface DetectedServer {
   recv_rate: number;
   country: string | null;
   detected_at: string;
+  latency?: number | null;
   is_game_server: boolean;
 }
 
@@ -289,7 +311,6 @@ const detectedServers = ref<DetectedServer[]>([]);
 const statusMessage = ref("");
 const statusType = ref<"info" | "success" | "error">("info");
 const addingRoute = ref<string | null>(null);
-const showMore = ref(false);
 
 // History State
 const MAX_HISTORY = 30; // Keep last 30 data points
@@ -321,11 +342,6 @@ const primaryServer = computed(() => {
   return sortedServers.value[0];
 });
 
-const otherServers = computed(() => {
-  if (sortedServers.value.length <= 1) return [];
-  return sortedServers.value.slice(1);
-});
-
 // Watch primary server to push history
 watch(primaryServer, (newVal) => {
   if (newVal) {
@@ -341,21 +357,27 @@ watch(primaryServer, (newVal) => {
   }
 });
 
-// Sparkline Paths
-const sendPath = computed(() => createSparklinePath("send"));
-const recvPath = computed(() => createSparklinePath("recv"));
+// Chart Helpers
+const maxChartValue = computed(() => {
+  if (history.value.length < 2) return 1024;
+  return Math.max(
+    ...history.value.map((d) => Math.max(d.send, d.recv)),
+    1024, // Min 1KB
+  );
+});
 
-function createSparklinePath(key: "send" | "recv") {
+// Separate Line and Area paths
+const sendPathLine = computed(() => createPath("send", false));
+const sendPathArea = computed(() => createPath("send", true));
+const recvPathLine = computed(() => createPath("recv", false));
+const recvPathArea = computed(() => createPath("recv", true));
+
+function createPath(key: "send" | "recv", isArea: boolean) {
   if (history.value.length < 2) return "";
 
-  const width = 100; // viewbox 100x100
+  const width = 100;
   const height = 100;
-
-  // Find max value to scale Y axis (min 1KB to avoid flatline at 0)
-  const maxVal = Math.max(
-    ...history.value.map((d) => Math.max(d.send, d.recv)),
-    1024,
-  );
+  const maxVal = maxChartValue.value;
 
   const points = history.value.map((d, i) => {
     const x = (i / (history.value.length - 1)) * width;
@@ -363,7 +385,21 @@ function createSparklinePath(key: "send" | "recv") {
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   });
 
-  return `M ${points.join(" L ")}`;
+  if (isArea) {
+    // Start at bottom-left, go to first point, follow points, go to bottom-right, close
+    const firstX = points[0].split(",")[0];
+    const lastX = points[points.length - 1].split(",")[0];
+    return `M ${firstX},${height} L ${points.join(" L ")} L ${lastX},${height} Z`;
+  } else {
+    // Just the line
+    return `M ${points.join(" L ")}`;
+  }
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 // Methods
@@ -462,14 +498,6 @@ async function addToRoutes(ip: string) {
   } finally {
     addingRoute.value = null;
   }
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
 }
 
 function formatTime(isoString: string): string {

@@ -13,9 +13,13 @@ use std::net::Ipv4Addr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use std::mem;
+
+// Configuration constants
+const MONITORING_INTERVAL_SECS: u64 = 2;
+const UDP_CACHE_TIMEOUT_SECS: u64 = 30;
+const GEOIP_API_URL: &str = "http://ip-api.com/json/";
 use windows::Win32::NetworkManagement::IpHelper::{
-    GetExtendedTcpTable, GetExtendedUdpTable, MIB_TCPTABLE_OWNER_PID,
-    MIB_UDPTABLE_OWNER_PID, TCP_TABLE_OWNER_PID_ALL, UDP_TABLE_OWNER_PID,
+    GetExtendedUdpTable, MIB_UDPTABLE_OWNER_PID, UDP_TABLE_OWNER_PID,
 };
 use windows::Win32::Networking::WinSock::{
     AF_INET, SOCK_RAW, IPPROTO_IP, SIO_RCVALL, 
@@ -24,16 +28,7 @@ use windows::Win32::Networking::WinSock::{
 };
 
 /// Network connection information including protocol, endpoints, and traffic rates.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NetworkConnection {
-    pub remote_ip: String,
-    pub remote_port: u16,
-    pub local_port: u16,
-    pub protocol: String, // "TCP" or "UDP"
-    pub state: Option<String>, // Only for TCP
-    pub bytes_sent_per_sec: u64,
-    pub bytes_recv_per_sec: u64,
-}
+
 
 /// Detected server information with metadata for display and routing.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -217,11 +212,10 @@ fn find_game_process_pid(process_name: &str) -> Option<u32> {
     let mut max_connections = 0;
     
     for &pid in &pids {
-        let tcp_count = get_tcp_connections(pid).len();
-        let udp_count = get_udp_connections(pid).len();
-        let total = tcp_count + udp_count;
+        let udp_count = get_udp_ports(pid).len();
+        let total = udp_count;
         
-        println!("   PID {}: {} TCP + {} UDP = {} total connections", pid, tcp_count, udp_count, total);
+        println!("   PID {}: {} UDP ports", pid, udp_count);
         
         if total > max_connections {
             max_connections = total;
@@ -241,127 +235,11 @@ fn find_game_process_pid(process_name: &str) -> Option<u32> {
     Some(selected_pid)
 }
 
-/// Get TCP connections for a specific process ID.
-fn get_tcp_connections(pid: u32) -> Vec<NetworkConnection> {
-    let mut connections = Vec::new();
-    
-    unsafe {
-        let mut size: u32 = 0;
-        
-        // First call to get required buffer size
-        let _ = GetExtendedTcpTable(
-            None,
-            &mut size,
-            false,
-            AF_INET.0 as u32,
-            TCP_TABLE_OWNER_PID_ALL,
-            0,
-        );
-        
-        if size == 0 {
-            return connections;
-        }
-        
-        // Allocate buffer
-        let mut buffer = vec![0u8; size as usize];
-        
-        // Second call to get actual data
-        let result = GetExtendedTcpTable(
-            Some(buffer.as_mut_ptr() as *mut _),
-            &mut size,
-            false,
-            AF_INET.0 as u32,
-            TCP_TABLE_OWNER_PID_ALL,
-            0,
-        );
-        
-        if result != 0 {
-            return connections;
-        }
-        
-        let table = &*(buffer.as_ptr() as *const MIB_TCPTABLE_OWNER_PID);
-            
-        let entries = std::slice::from_raw_parts(
-            table.table.as_ptr(),
-            table.dwNumEntries as usize,
-        );
-        
-        for entry in entries {
-            if entry.dwOwningPid == pid {
-                let remote_ip = ip_to_string(entry.dwRemoteAddr);
-                
-                // Only include public IPs
-                if is_public_ip(&remote_ip) {
-                    connections.push(NetworkConnection {
-                        remote_ip,
-                        remote_port: port_to_host(entry.dwRemotePort),
-                        local_port: port_to_host(entry.dwLocalPort),
-                        protocol: "TCP".to_string(),
-                        state: Some(format!("{:?}", entry.dwState)),
-                        bytes_sent_per_sec: 0,
-                        bytes_recv_per_sec: 0,
-                    });
-                }
-            }
-        }
-    }
-    
-    connections
-}
+
 
 /// Get UDP connections for a specific process ID using Windows API.
 /// Note: This only returns local bindings.
-fn get_udp_connections(pid: u32) -> Vec<NetworkConnection> {
-    let connections = Vec::new();
-    
-    unsafe {
-        let mut size: u32 = 0;
-        
-        let _ = GetExtendedUdpTable(
-            None,
-            &mut size,
-            false,
-            AF_INET.0 as u32,
-            UDP_TABLE_OWNER_PID,
-            0,
-        );
-        
-        if size == 0 {
-            return connections;
-        }
-        
-        let mut buffer = vec![0u8; size as usize];
-        
-        let result = GetExtendedUdpTable(
-            Some(buffer.as_mut_ptr() as *mut _),
-            &mut size,
-            false,
-            AF_INET.0 as u32,
-            UDP_TABLE_OWNER_PID,
-            0,
-        );
-        
-        if result != 0 {
-            return connections;
-        }
-        
-        let table = &*(buffer.as_ptr() as *const MIB_UDPTABLE_OWNER_PID);
-            
-        let entries = std::slice::from_raw_parts(
-            table.table.as_ptr(),
-            table.dwNumEntries as usize,
-        );
-        
-        for entry in entries {
-            if entry.dwOwningPid == pid {
-                let _local_ip = ip_to_string(entry.dwLocalAddr);
-                // Just for local port tracking
-            }
-        }
-    }
-    
-    connections
-}
+
 
 /// Returns a set of local ports used by the given PID for UDP.
 fn get_udp_ports(pid: u32) -> HashSet<u16> {
@@ -405,7 +283,7 @@ async fn resolve_ip_location(ip: &str) -> Option<String> {
     // Only query public IPs to avoid wasting quotas
     if !is_public_ip(ip) { return None; }
     
-    let url = format!("http://ip-api.com/json/{}", ip);
+    let url = format!("{}{}", GEOIP_API_URL, ip);
     match reqwest::get(&url).await {
         Ok(resp) => {
             if let Ok(json) = resp.json::<GeoIpResponse>().await {
@@ -554,13 +432,15 @@ fn start_sniffer(
     }
 }
 
+
+
 /// Background monitoring loop that checks process connections periodically.
 async fn monitoring_loop(
     process_name: String,
     mut cancel_rx: tokio::sync::watch::Receiver<bool>,
     state: Arc<Mutex<MonitorState>>,
 ) {
-    let mut interval = tokio::time::interval(Duration::from_secs(2));
+    let mut interval = tokio::time::interval(Duration::from_secs(MONITORING_INTERVAL_SECS));
     
     // Store previous traffic stats to calculate rate: key -> (total_sent, total_recv)
     let mut prev_stats: HashMap<String, (u64, u64)> = HashMap::new();
@@ -598,9 +478,6 @@ async fn monitoring_loop(
 
                 // Get process ID - select the one with network activity
                 if let Some(pid) = find_game_process_pid(&process_name) {
-                    // Get TCP connections (standard API)
-                    let tcp_conns = get_tcp_connections(pid);
-                    
                     // Get UDP ports bound by the process (standard API)
                     let udp_ports = get_udp_ports(pid);
                     
@@ -610,7 +487,7 @@ async fn monitoring_loop(
                         (
                             guard.interesting_ports.clone(),
                             guard.udp_detected_cache.clone(),
-                            guard.geo_cache.clone()
+                            guard.geo_cache.clone(),
                         )
                     };
 
@@ -624,28 +501,11 @@ async fn monitoring_loop(
                     // Collect detected servers
                     let mut detected = Vec::new();
                     
-                    // 1. Add TCP connections
-                    for conn in &tcp_conns {
-                         detected.push(DetectedServer {
-                            ip: conn.remote_ip.clone(),
-                            port: conn.remote_port,
-                            protocol: "TCP".to_string(),
-                            send_rate: 0,
-                            recv_rate: 0,
-                            country: {
-                                geo_cache_arc.lock().unwrap().get(&conn.remote_ip).cloned().flatten()
-                            },
-                            detected_at: chrono::Local::now().to_rfc3339(),
-                            is_game_server: false,
-                        });
-                        println!("   → TCP: {}:{}", conn.remote_ip, conn.remote_port);
-                    }
-                    
                     // 2. Add UDP connections from sniffer cache
                     {
                         let mut cache_lock = udp_detected_cache_arc.lock().unwrap();
                         // Remove old entries (> 30 seconds inactivity)
-                        cache_lock.retain(|_, stats| stats.last_seen.elapsed() < Duration::from_secs(30));
+                        cache_lock.retain(|_, stats| stats.last_seen.elapsed() < Duration::from_secs(UDP_CACHE_TIMEOUT_SECS));
                         
                         for (key, stats) in cache_lock.iter() {
                             let parts: Vec<&str> = key.split(':').collect();
@@ -688,27 +548,28 @@ async fn monitoring_loop(
                         st.detected_servers = detected.clone();
                     }
 
-                    // Trigger GeoIP lookups for servers without location
+                    // Trigger GeoIP lookups
                     let geo_cache = state.lock().unwrap().geo_cache.clone();
-                    for server in detected {
-                        if is_public_ip(&server.ip) {
-                            let should_lookup = {
-                                let cache = geo_cache.lock().unwrap();
-                                !cache.contains_key(&server.ip)
-                            };
 
-                            if should_lookup {
-                                let ip = server.ip.clone();
-                                let cache_clone = geo_cache.clone();
-                                tokio::spawn(async move {
-                                    if let Some(loc) = resolve_ip_location(&ip).await {
-                                        cache_clone.lock().unwrap().insert(ip, Some(loc));
-                                    } else {
-                                        // Cache failure as None to avoid infinite retries
-                                        cache_clone.lock().unwrap().insert(ip, None);
-                                    }
-                                });
-                            }
+                    for server in detected {
+                        if !is_public_ip(&server.ip) { continue; }
+                        let ip = server.ip.clone();
+
+                        // GeoIP
+                        let should_lookup_geo = {
+                            let cache = geo_cache.lock().unwrap();
+                            !cache.contains_key(&server.ip)
+                        };
+                        if should_lookup_geo {
+                           let cache_clone = geo_cache.clone();
+                           let ip_clone = ip.clone();
+                           tokio::spawn(async move {
+                               if let Some(loc) = resolve_ip_location(&ip_clone).await {
+                                   cache_clone.lock().unwrap().insert(ip_clone, Some(loc));
+                               } else {
+                                   cache_clone.lock().unwrap().insert(ip_clone, None);
+                               }
+                           });
                         }
                     }
                 } else {

@@ -483,20 +483,13 @@ const handleDisconnect = async () => {
                         ></div>
                         停止加速
                       </Button>
-
-                      <div
-                        class="mt-4 flex items-center justify-center gap-2 text-[10px] text-zinc-600 font-medium uppercase tracking-widest"
-                      >
-                        <ShieldCheck class="w-3 h-3" />
-                        WireGuard Encrypted
-                      </div>
                     </div>
                   </div>
                 </div>
 
                 <!-- Server Detection Component -->
                 <div class="pt-6 border-t border-zinc-900">
-                  <div class="max-w-[420px]">
+                  <div class="w-full">
                     <ServerDetection
                       v-if="selectedGame"
                       :process-name="selectedGame.processName"
