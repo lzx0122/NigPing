@@ -5,16 +5,20 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "build": "tsc"
+    "build": "tsc",
+    "admin:dev": "cd admin-ui && pnpm run dev",
+    "admin:build": "cd admin-ui && pnpm run build"
   },
   "dependencies": {
-    "hono": "^4.0.0",
-    "@hono/node-server": "^1.8.0"
+    "@hono/node-server": "^1.8.0",
+    "@supabase/supabase-js": "^2.91.1",
+    "dotenv": "^17.2.3",
+    "hono": "^4.0.0"
   },
   "devDependencies": {
+    "@types/node": "^20.11.0",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.0",
-    "@types/node": "^20.11.0"
+    "typescript": "^5.3.0"
   },
   "type": "module"
 }

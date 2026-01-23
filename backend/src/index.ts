@@ -1,29 +1,46 @@
+import "dotenv/config";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { readFileSync, existsSync } from "fs";
+import { join } from "path";
+import { supabase } from "./db/supabase";
+import type { Server } from "./db/supabase";
 
 const app = new Hono();
 
 // Enable CORS for frontend development
 app.use("/*", cors());
 
-// Simple in-memory storage for prototype
-interface Server {
-  ip: string;
-  region: string;
-  addedAt: string;
-}
-
-const servers: Server[] = [];
-
 app.get("/", (c) => {
   return c.text("NigPing Backend is running!");
 });
 
-app.get("/api/servers", (c) => {
-  return c.json(servers);
+// Get all servers
+app.get("/api/servers", async (c) => {
+  try {
+    const { data, error } = await supabase
+      .from("servers")
+      .select("*")
+      .order("added_at", { ascending: false });
+
+    if (error) throw error;
+
+    // Transform to match frontend expectations
+    const servers = (data || []).map((server: any) => ({
+      ip: server.ip,
+      region: server.region,
+      addedAt: server.added_at,
+    }));
+
+    return c.json(servers);
+  } catch (error) {
+    console.error("Error fetching servers:", error);
+    return c.json({ error: "Failed to fetch servers" }, 500);
+  }
 });
 
+// Add new server
 app.post("/api/servers", async (c) => {
   try {
     const body = await c.req.json<{ ip: string; region: string }>();
@@ -32,116 +49,168 @@ app.post("/api/servers", async (c) => {
       return c.json({ error: "Missing ip or region" }, 400);
     }
 
-    const newServer: Server = {
-      ip: body.ip,
-      region: body.region,
-      addedAt: new Date().toISOString(),
+    const { data, error } = await supabase
+      .from("servers")
+      .insert([
+        {
+          ip: body.ip,
+          region: body.region,
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      // Check for unique constraint violation
+      if (error.code === "23505") {
+        return c.json({ error: "Server with this IP already exists" }, 409);
+      }
+      throw error;
+    }
+
+    // Transform to match frontend expectations
+    const newServer = {
+      ip: data.ip,
+      region: data.region,
+      addedAt: data.added_at,
     };
 
-    servers.push(newServer);
     return c.json(newServer, 201);
-  } catch (e) {
-    return c.json({ error: "Invalid JSON" }, 400);
+  } catch (error) {
+    console.error("Error adding server:", error);
+    return c.json({ error: "Failed to add server" }, 500);
   }
 });
 
-// Serve Admin UI
-app.get("/admin", (c) => {
-  return c.html(htmlContent);
+// Update server
+app.put("/api/servers/:ip", async (c) => {
+  try {
+    const oldIp = c.req.param("ip");
+    const body = await c.req.json<{ ip: string; region: string }>();
+
+    if (!body.ip || !body.region) {
+      return c.json({ error: "Missing ip or region" }, 400);
+    }
+
+    const { data, error } = await supabase
+      .from("servers")
+      .update({
+        ip: body.ip,
+        region: body.region,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("ip", oldIp)
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === "PGRST116") {
+        return c.json({ error: "Server not found" }, 404);
+      }
+      throw error;
+    }
+
+    // Transform to match frontend expectations
+    const updatedServer = {
+      ip: data.ip,
+      region: data.region,
+      addedAt: data.added_at,
+    };
+
+    return c.json(updatedServer);
+  } catch (error) {
+    console.error("Error updating server:", error);
+    return c.json({ error: "Failed to update server" }, 500);
+  }
 });
 
-const htmlContent = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NigPing Server Manager</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f4f4f5; }
-        .container { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        h1 { margin-top: 0; color: #18181b; }
-        .form-group { margin-bottom: 1rem; }
-        label { display: block; margin-bottom: 0.5rem; color: #3f3f46; font-weight: 500; }
-        input { width: 100%; padding: 0.5rem; border: 1px solid #d4d4d8; border-radius: 4px; box-sizing: border-box; }
-        button { background: #18181b; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-weight: 500; }
-        button:hover { background: #27272a; }
-        table { width: 100%; border-collapse: collapse; margin-top: 2rem; }
-        th, td { text-align: left; padding: 0.75rem; border-bottom: 1px solid #e4e4e7; }
-        th { font-weight: 600; color: #71717a; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Server Management</h1>
-        <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
-            <div style="flex: 1;">
-                <label>IP Address</label>
-                <input type="text" id="ipInput" placeholder="1.2.3.4">
-            </div>
-            <div style="flex: 1;">
-                <label>Region</label>
-                <input type="text" id="regionInput" placeholder="Taiwan">
-            </div>
-            <div style="display: flex; align-items: flex-end;">
-                <button onclick="addServer()">Add Server</button>
-            </div>
-        </div>
-        
-        <table>
-            <thead>
-                <tr>
-                    <th>IP Address</th>
-                    <th>Region</th>
-                    <th>Added At</th>
-                </tr>
-            </thead>
-            <tbody id="serverList"></tbody>
-        </table>
-    </div>
+// Delete server
+app.delete("/api/servers/:ip", async (c) => {
+  try {
+    const ip = c.req.param("ip");
 
-    <script>
-        async function loadServers() {
-            const res = await fetch('/api/servers');
-            const servers = await res.json();
-            const tbody = document.getElementById('serverList');
-            tbody.innerHTML = servers.map(s => \`
-                <tr>
-                    <td>\${s.ip}</td>
-                    <td>\${s.region}</td>
-                    <td>\${new Date(s.addedAt).toLocaleString()}</td>
-                </tr>
-            \`).join('');
-        }
+    const { error } = await supabase.from("servers").delete().eq("ip", ip);
 
-        async function addServer() {
-            const ip = document.getElementById('ipInput').value;
-            const region = document.getElementById('regionInput').value;
-            if(!ip || !region) return alert('Please fill in all fields');
+    if (error) throw error;
 
-            const res = await fetch('/api/servers', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ip, region })
-            });
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting server:", error);
+    return c.json({ error: "Failed to delete server" }, 500);
+  }
+});
 
-            if(res.ok) {
-                document.getElementById('ipInput').value = '';
-                document.getElementById('regionInput').value = '';
-                loadServers();
-            } else {
-                alert('Failed to add server');
-            }
-        }
+// Get stats
+app.get("/api/stats", async (c) => {
+  try {
+    const { data, error } = await supabase.from("servers").select("region");
 
-        loadServers();
-    </script>
-</body>
-</html>
-`;
+    if (error) throw error;
+
+    const byRegion: Record<string, number> = {};
+    (data || []).forEach((server: any) => {
+      byRegion[server.region] = (byRegion[server.region] || 0) + 1;
+    });
+
+    return c.json({
+      total: data?.length || 0,
+      byRegion,
+    });
+  } catch (error) {
+    console.error("Error fetching stats:", error);
+    return c.json({ error: "Failed to fetch stats" }, 500);
+  }
+});
+
+// Serve static assets (CSS, JS) from admin-ui/dist/assets
+app.get("/assets/*", (c) => {
+  const assetPath = c.req.path.replace("/assets/", "");
+  const fullPath = join(process.cwd(), "admin-ui", "dist", "assets", assetPath);
+
+  if (existsSync(fullPath)) {
+    const content = readFileSync(fullPath);
+
+    // Set appropriate content type
+    const ext = assetPath.split(".").pop()?.toLowerCase();
+    const contentTypes: Record<string, string> = {
+      js: "application/javascript",
+      css: "text/css",
+      svg: "image/svg+xml",
+      png: "image/png",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+    };
+
+    const contentType = contentTypes[ext || ""] || "application/octet-stream";
+    return c.body(content, 200, { "Content-Type": contentType });
+  }
+
+  return c.text("Asset not found", 404);
+});
+
+// Serve vite.svg from admin-ui/dist
+app.get("/vite.svg", (c) => {
+  const svgPath = join(process.cwd(), "admin-ui", "dist", "vite.svg");
+  if (existsSync(svgPath)) {
+    const content = readFileSync(svgPath);
+    return c.body(content, 200, { "Content-Type": "image/svg+xml" });
+  }
+  return c.text("Not found", 404);
+});
+
+// Serve static files from admin-ui/dist (production build)
+app.get("/admin", (c) => {
+  const indexPath = join(process.cwd(), "admin-ui", "dist", "index.html");
+  if (existsSync(indexPath)) {
+    const html = readFileSync(indexPath, "utf-8");
+    return c.html(html);
+  }
+  return c.text("Admin UI not built. Run 'pnpm run admin:build' first.", 404);
+});
 
 const port = 3000;
 console.log(`Server is running on port ${port}`);
+console.log(`Admin UI: http://localhost:${port}/admin`);
 
 serve({
   fetch: app.fetch,

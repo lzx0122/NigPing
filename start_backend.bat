@@ -1,4 +1,4 @@
 @echo off
 cd backend
-npm run dev
+pnpm run dev
 pause
