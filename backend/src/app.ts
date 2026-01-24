@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, readdirSync } from "fs";
 import { join } from "path";
 import { supabase } from "./db/supabase.js";
 
@@ -10,7 +10,7 @@ const app = new Hono();
 app.use("/*", cors());
 
 app.get("/", (c) => {
-  return c.text("NigPing Backend is running!");
+  return c.redirect("/admin");
 });
 
 // Get all servers
@@ -284,7 +284,24 @@ app.get("/admin", (c) => {
     const html = readFileSync(indexPath, "utf-8");
     return c.html(html);
   }
-  return c.text("Admin UI not built. Run 'pnpm run admin:build' first.", 404);
+
+  // Debugging Vercel file system
+  try {
+    const debug = {
+      cwd: process.cwd(),
+      filesInCwd: readdirSync(process.cwd()),
+      adminUiPath: join(process.cwd(), "admin-ui"),
+      adminUiExists: existsSync(join(process.cwd(), "admin-ui")),
+      distPath: join(process.cwd(), "admin-ui", "dist"),
+      distExists: existsSync(join(process.cwd(), "admin-ui", "dist")),
+      filesInDist: existsSync(join(process.cwd(), "admin-ui", "dist"))
+        ? readdirSync(join(process.cwd(), "admin-ui", "dist"))
+        : "dist not found",
+    };
+    return c.json({ error: "Admin UI not found", debug }, 404);
+  } catch (e: any) {
+    return c.json({ error: "Error debugging", message: e.message }, 500);
+  }
 });
 
 export default app;
