@@ -1,3 +1,4 @@
+/// <reference path="./env.d.ts" />
 import { createApp } from "vue";
 import "./style.css";
 import MainApp from "./MainApp.vue";
