@@ -3,8 +3,8 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "types": ["vite/client"],
-
-    /* Linting */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
@@ -12,5 +12,11 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue", "src/**/*.d.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.vue",
+    "src/**/*.d.ts",
+    "src/env.d.ts"
+  ]
 }
