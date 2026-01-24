@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
-import { supabase } from "./db/supabase";
+import { supabase } from "./db/supabase.js";
 
 const app = new Hono();
 
