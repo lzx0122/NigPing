@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "build": "tsc",
+    "build": "pnpm run admin:build && tsc",
     "admin:dev": "cd admin-ui && pnpm run dev",
     "admin:build": "cd admin-ui && pnpm run build"
   },
