@@ -1,7 +1,7 @@
 import { ref, computed } from "vue";
 import type { Server, ServerStats } from "../types/server";
 
-const API_BASE = "http://localhost:3000/api";
+const API_BASE = "/api";
 
 export function useServers() {
   const servers = ref<Server[]>([]);
