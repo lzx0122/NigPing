@@ -16,3 +16,10 @@ export interface Server {
   added_at?: string;
   updated_at?: string;
 }
+
+export interface GameIpRange {
+  id?: string;
+  game_id: string; // e.g. 'pubg'
+  ip_range: string; // CIDR, e.g. '1.2.3.0/24'
+  created_at?: string;
+}

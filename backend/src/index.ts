@@ -140,6 +140,88 @@ app.delete("/api/servers/:ip", async (c) => {
   }
 });
 
+// === Game IP Ranges Endpoints ===
+
+// Get IP ranges for a specific game
+app.get("/api/games/:gameId/ranges", async (c) => {
+  try {
+    const gameId = c.req.param("gameId");
+    const { data, error } = await supabase
+      .from("game_ip_ranges")
+      .select("ip_range")
+      .eq("game_id", gameId);
+
+    if (error) throw error;
+
+    // Return array of strings
+    return c.json((data || []).map((row: any) => row.ip_range));
+  } catch (error) {
+    console.error("Error fetching game IP ranges:", error);
+    return c.json({ error: "Failed to fetch game IP ranges" }, 500);
+  }
+});
+
+// Add new IP range for a specific game
+app.post("/api/games/:gameId/ranges", async (c) => {
+  try {
+    const gameId = c.req.param("gameId");
+    const body = await c.req.json<{ ipRange: string }>();
+
+    if (!body.ipRange) {
+      return c.json({ error: "Missing ipRange" }, 400);
+    }
+
+    const { data, error } = await supabase
+      .from("game_ip_ranges")
+      .insert([
+        {
+          game_id: gameId,
+          ip_range: body.ipRange,
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      // If unique constraint violation, just return success (idempotent)
+      if (error.code === "23505") {
+        return c.json({ message: "Range already exists" }, 200);
+      }
+      throw error;
+    }
+
+    return c.json({ success: true, range: data }, 201);
+  } catch (error) {
+    console.error("Error adding game IP range:", error);
+    return c.json({ error: "Failed to add game IP range" }, 500);
+  }
+});
+
+// Delete IP range for a specific game
+app.delete("/api/games/:gameId/ranges", async (c) => {
+  try {
+    const gameId = c.req.param("gameId");
+    const ipRange = c.req.query("range");
+
+    if (!ipRange) {
+      return c.json({ error: "Missing range query parameter" }, 400);
+    }
+
+    const { error } = await supabase
+      .from("game_ip_ranges")
+      .delete()
+      .eq("game_id", gameId)
+      .eq("ip_range", ipRange);
+
+    if (error) throw error;
+
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting game IP range:", error);
+    return c.json({ error: "Failed to delete game IP range" }, 500);
+  }
+});
+
 // Get stats
 app.get("/api/stats", async (c) => {
   try {

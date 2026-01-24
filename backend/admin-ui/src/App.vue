@@ -4,6 +4,7 @@ import { useServers } from "./composables/useServers";
 import ServerForm from "./components/ServerForm.vue";
 import ServerList from "./components/ServerList.vue";
 import DeleteConfirm from "./components/DeleteConfirm.vue";
+import GameRangeManager from "./components/GameRangeManager.vue";
 import type { Server } from "./types/server";
 
 const {
@@ -18,9 +19,11 @@ const {
   deleteServer,
 } = useServers();
 
+const currentTab = ref<"servers" | "ranges">("servers");
 const showAddForm = ref(false);
 const editingServer = ref<Server | null>(null);
 const deletingServerIp = ref<string | null>(null);
+const selectedGameId = ref("pubg");
 
 onMounted(() => {
   fetchServers();
@@ -70,151 +73,146 @@ function toggleAddForm() {
           <h1 class="title">NigPing Server Manager</h1>
           <p class="subtitle">Manage your server infrastructure</p>
         </div>
-        <button class="btn-add" @click="toggleAddForm">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
+        <div class="flex gap-4">
+          <button
+            :class="['tab-btn', currentTab === 'servers' ? 'active' : '']"
+            @click="currentTab = 'servers'"
           >
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-          Add Server
+            Servers
+          </button>
+          <button
+            :class="['tab-btn', currentTab === 'ranges' ? 'active' : '']"
+            @click="currentTab = 'ranges'"
+          >
+            Game Ranges
+          </button>
+        </div>
+        <button
+          v-if="currentTab === 'servers'"
+          class="btn-add"
+          @click="toggleAddForm"
+        >
+          + Add Server
         </button>
       </div>
     </header>
 
     <main class="main">
       <div class="container">
-        <!-- Stats Section -->
-        <div class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-icon">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
-                <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
-                <line x1="6" y1="6" x2="6.01" y2="6"></line>
-                <line x1="6" y1="18" x2="6.01" y2="18"></line>
-              </svg>
-            </div>
-            <div class="stat-content">
-              <p class="stat-label">Total Servers</p>
-              <p class="stat-value">{{ stats.total }}</p>
-            </div>
+        <!-- Game Ranges Tab -->
+        <div v-if="currentTab === 'ranges'" class="space-y-6">
+          <div class="game-selector-card">
+            <label class="form-label">Select Game</label>
+            <select v-model="selectedGameId" class="form-select">
+              <option value="pubg">PUBG</option>
+              <!-- Add more games here as needed -->
+            </select>
           </div>
 
-          <div class="stat-card">
-            <div class="stat-icon">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="2" y1="12" x2="22" y2="12"></line>
-                <path
-                  d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
-                ></path>
-              </svg>
-            </div>
-            <div class="stat-content">
-              <p class="stat-label">Regions</p>
-              <p class="stat-value">{{ Object.keys(stats.byRegion).length }}</p>
-            </div>
+          <div class="range-manager-card">
+            <GameRangeManager :gameId="selectedGameId" />
           </div>
         </div>
 
-        <!-- Error Message -->
-        <div v-if="error" class="error-banner">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="8" x2="12" y2="12"></line>
-            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-          </svg>
-          <span>{{ error }}</span>
-        </div>
+        <!-- Servers Tab -->
+        <div v-else>
+          <!-- Stats Section -->
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+                  <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+                  <line x1="6" y1="6" x2="6.01" y2="6"></line>
+                  <line x1="6" y1="18" x2="6.01" y2="18"></line>
+                </svg>
+              </div>
+              <div class="stat-content">
+                <p class="stat-label">Total Servers</p>
+                <p class="stat-value">{{ stats.total }}</p>
+              </div>
+            </div>
 
-        <!-- Add/Edit Form -->
-        <ServerForm
-          v-if="showAddForm"
-          mode="add"
-          @submit="handleAddServer"
-          @cancel="showAddForm = false"
-        />
-
-        <ServerForm
-          v-if="editingServer"
-          mode="edit"
-          :initial-ip="editingServer.ip"
-          :initial-region="editingServer.region"
-          @submit="handleUpdateServer"
-          @cancel="editingServer = null"
-        />
-
-        <!-- Search Bar -->
-        <div class="search-section">
-          <div class="search-bar">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <circle cx="11" cy="11" r="8"></circle>
-              <path d="m21 21-4.35-4.35"></path>
-            </svg>
-            <input
-              v-model="searchQuery"
-              type="text"
-              placeholder="Search by IP or region..."
-            />
+            <div class="stat-card">
+              <div class="stat-icon">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="2" y1="12" x2="22" y2="12"></line>
+                  <path
+                    d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10 15.3 15.3 0 0 1 4-10z"
+                  ></path>
+                </svg>
+              </div>
+              <div class="stat-content">
+                <p class="stat-label">Regions</p>
+                <p class="stat-value">
+                  {{ Object.keys(stats.byRegion).length }}
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <!-- Server List -->
-        <ServerList
-          :servers="filteredServers"
-          :loading="loading"
-          @edit="handleEditServer"
-          @delete="handleDeleteClick"
-        />
+          <!-- Error Message -->
+          <div v-if="error" class="error-banner">
+            <span>{{ error }}</span>
+          </div>
+
+          <!-- Add/Edit Form -->
+          <ServerForm
+            v-if="showAddForm"
+            mode="add"
+            @submit="handleAddServer"
+            @cancel="showAddForm = false"
+          />
+
+          <ServerForm
+            v-if="editingServer"
+            mode="edit"
+            :initial-ip="editingServer.ip"
+            :initial-region="editingServer.region"
+            @submit="handleUpdateServer"
+            @cancel="editingServer = null"
+          />
+
+          <!-- Search Bar -->
+          <div class="search-section">
+            <div class="search-bar">
+              <input
+                v-model="searchQuery"
+                type="text"
+                placeholder="Search by IP or region..."
+              />
+            </div>
+          </div>
+
+          <!-- Server List -->
+          <ServerList
+            :servers="filteredServers"
+            :loading="loading"
+            @edit="handleEditServer"
+            @delete="handleDeleteClick"
+          />
+        </div>
       </div>
     </main>
 
@@ -418,5 +416,73 @@ function toggleAddForm() {
   .title {
     font-size: 1.5rem;
   }
+}
+
+.tab-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #78716c;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tab-btn:hover {
+  background: #f5f5f4;
+  color: #292524;
+}
+
+.tab-btn.active {
+  background: #e7e5e4;
+  color: #292524;
+  font-weight: 600;
+}
+
+.game-selector-card {
+  background: #ffffff;
+  padding: 1.5rem;
+  border-radius: 12px;
+  border: 1px solid #e7e5e4;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 1rem;
+}
+
+.range-manager-card {
+  background: #ffffff;
+  padding: 1.5rem;
+  border-radius: 12px;
+  border: 1px solid #e7e5e4;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #57534e;
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+
+.form-select {
+  display: block;
+  width: 100%;
+  max-width: 20rem;
+  padding: 0.625rem 0.875rem;
+  border: 1.5px solid #d6d3d1;
+  border-radius: 8px;
+  font-size: 0.9375rem;
+  color: #292524;
+  background-color: #ffffff;
+  transition: all 0.2s ease;
+}
+
+.form-select:focus {
+  outline: none;
+  border-color: #78716c;
+  box-shadow: 0 0 0 3px rgba(120, 113, 108, 0.1);
 }
 </style>

@@ -17,6 +17,8 @@ import {
   Server as ServerIcon,
   Play,
   StopCircle,
+  List,
+  X,
 } from "lucide-vue-next";
 import { GAMES, type Game, type Server } from "@/data/games";
 import ServerGlobe from "@/components/ServerGlobe.vue";
@@ -45,6 +47,10 @@ const goToDetails = (game: Game) => {
   if (game.servers.length > 0) {
     selectedServer.value = game.servers[0];
   }
+
+  // Fetch IP ranges for this game
+  fetchGameRanges(game.id);
+
   currentView.value = "details";
 };
 
@@ -53,45 +59,30 @@ const goToHome = () => {
   selectedGame.value = null;
 };
 
-// PUBG Asia Server Ranges (Korea, Japan, Singapore)
-// 包含 AWS ap-northeast-2 (Seoul), ap-northeast-1 (Tokyo), ap-southeast-1 (Singapore)
-// 以及 Azure Korea 和其他提供商
-const PUBG_ASIA_RANGES = [
-  // Korea (AWS)
-  "13.124.0.0/16",
-  "13.125.0.0/16",
-  "13.209.0.0/16",
-  "52.78.0.0/16",
-  "52.79.0.0/16",
-  // Korea (Azure)
-  "20.194.0.0/16", // Azure Korea Central
-  "20.196.0.0/16", // Azure Korea South
-  "20.198.0.0/16",
-  "20.200.0.0/16",
-  "20.41.0.0/16",
-  "52.231.0.0/16", // Azure Korea (主要範圍)
-  "52.237.0.0/16", // Azure Korea (實際 PUBG 使用)
-  // Singapore (AWS - Common for SEA region)
-  "13.228.0.0/16",
-  "18.136.0.0/16",
-  "18.138.0.0/16",
-  "52.74.0.0/16",
-  "52.76.0.0/16",
-  "54.169.0.0/16",
-  "54.251.0.0/16",
-  // Japan (AWS - Common fallback)
-  "13.112.0.0/16",
-  "52.192.0.0/16",
-  "54.248.0.0/16",
-  // Tencent Cloud / Other CDN (PUBG 實際使用)
-  "85.236.96.0/22", // 包含 85.236.96.x - 85.236.99.x
-  "103.28.54.0/24", // 東南亞遊戲伺服器
-  // AWS Global Accelerator (PUBG 使用)
-  "75.2.0.0/16", // AWS Global Accelerator range
-  "99.77.0.0/16", // AWS Global Accelerator range
-].join(", ");
+const gameIpRanges = ref<Set<string>>(new Set());
+const showRanges = ref(false);
 
-const getWgConfig = (server: Server) => `
+// Fetch IP ranges for selected game
+const fetchGameRanges = async (gameId: string) => {
+  try {
+    const ranges = (await fetch(
+      `http://localhost:3000/api/games/${gameId}/ranges`,
+    ).then((res) => res.json())) as string[];
+
+    // Clear and add new ranges
+    gameIpRanges.value.clear();
+    ranges.forEach((range) => gameIpRanges.value.add(range));
+
+    console.log(`Fetched ${ranges.length} IP ranges for ${gameId}`);
+  } catch (error) {
+    console.error(`Failed to fetch IP ranges for ${gameId}:`, error);
+  }
+};
+
+const getWgConfig = (server: Server) => {
+  const allowedIps = Array.from(gameIpRanges.value).join(", ");
+
+  return `
 [Interface]
 PrivateKey = ${PRIVATE_KEY}
 Address = 10.8.0.2/24
@@ -101,9 +92,10 @@ MTU = 1280
 [Peer]
 PublicKey = ${server.publicKey}
 PresharedKey = JbLLJPvjfXhykHg8mDrNdonHhNTlAYZNh9v3u8bbNzI=
-AllowedIPs = ${PUBG_ASIA_RANGES}
+AllowedIPs = ${allowedIps}
 Endpoint = ${server.endpoint}
 `;
+};
 
 const handleConnect = async () => {
   if (!selectedServer.value) return;
@@ -389,6 +381,15 @@ const handleDisconnect = async () => {
                       >
                         <ServerIcon class="w-3.5 h-3.5" /> 節點選擇
                       </label>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        class="h-6 px-2 text-[10px] text-zinc-500 hover:text-zinc-300"
+                        @click="showRanges = true"
+                      >
+                        <List class="w-3 h-3 mr-1" />
+                        顯示 IP 範圍
+                      </Button>
                     </div>
 
                     <div
@@ -493,6 +494,9 @@ const handleDisconnect = async () => {
                     <ServerDetection
                       v-if="selectedGame"
                       :process-name="selectedGame.processName"
+                      :game-id="selectedGame.id"
+                      :known-ranges="gameIpRanges"
+                      @new-range-detected="fetchGameRanges(selectedGame.id)"
                     />
                   </div>
                 </div>
@@ -501,6 +505,52 @@ const handleDisconnect = async () => {
           </div>
         </div>
       </main>
+
+      <!-- IP Ranges Modal -->
+      <div
+        v-if="showRanges"
+        class="absolute inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-8"
+        @click.self="showRanges = false"
+      >
+        <div
+          class="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-lg shadow-2xl flex flex-col max-h-[80vh]"
+        >
+          <div
+            class="flex items-center justify-between p-6 border-b border-zinc-800"
+          >
+            <h3 class="text-lg font-bold text-white">Known IP Ranges</h3>
+            <button
+              @click="showRanges = false"
+              class="text-zinc-500 hover:text-white"
+            >
+              <X class="w-5 h-5" />
+            </button>
+          </div>
+          <div class="p-6 overflow-y-auto custom-scrollbar">
+            <div class="grid grid-cols-2 gap-3">
+              <div
+                v-for="range in Array.from(gameIpRanges).sort()"
+                :key="range"
+                class="bg-black/50 border border-zinc-800/50 rounded px-3 py-2 text-zinc-300 font-mono text-sm flex items-center gap-2"
+              >
+                <div class="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                {{ range }}
+              </div>
+              <div
+                v-if="gameIpRanges.size === 0"
+                class="col-span-2 text-center text-zinc-500 py-8 italic"
+              >
+                No ranges fetched from backend.
+              </div>
+            </div>
+          </div>
+          <div
+            class="p-4 border-t border-zinc-800 bg-zinc-950/50 rounded-b-xl text-xs text-zinc-500 text-center"
+          >
+            Total: {{ gameIpRanges.size }} ranges
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
