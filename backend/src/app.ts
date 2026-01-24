@@ -1,7 +1,11 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { readFileSync, existsSync, readdirSync } from "fs";
-import { join } from "path";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 import { supabase } from "./db/supabase.js";
 
 const app = new Hono();
