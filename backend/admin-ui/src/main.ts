@@ -1,5 +1,5 @@
-import { createApp } from 'vue'
-import './style.css'
-import AdminApp from './AdminApp.vue'
+import { createApp } from "vue";
+import "./style.css";
+import MainApp from "./MainApp.vue";
 
-createApp(AdminApp).mount('#app')
+createApp(MainApp).mount("#app");
