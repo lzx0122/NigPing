@@ -241,27 +241,50 @@ app.get("/api/stats", async (c) => {
   }
 });
 
+// Helper to find the correct admin-ui/dist path
+function resolveAdminUiPath(): string | null {
+  const candidates = [
+    // Standard local/docker path
+    join(process.cwd(), "admin-ui", "dist"),
+    // Vercel monorepo structure (cwd might be root, backend is subdir)
+    join(process.cwd(), "backend", "admin-ui", "dist"),
+    // Relative to source file (commonjs/esm build diffs)
+    join(__dirname, "..", "admin-ui", "dist"),
+    join(__dirname, "..", "..", "admin-ui", "dist"),
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 // Serve static assets (CSS, JS) from admin-ui/dist/assets
 app.get("/assets/*", (c) => {
   const assetPath = c.req.path.replace("/assets/", "");
-  const fullPath = join(process.cwd(), "admin-ui", "dist", "assets", assetPath);
+  const distPath = resolveAdminUiPath();
 
-  if (existsSync(fullPath)) {
-    const content = readFileSync(fullPath);
+  if (distPath) {
+    const fullPath = join(distPath, "assets", assetPath);
+    if (existsSync(fullPath)) {
+      const content = readFileSync(fullPath);
 
-    // Set appropriate content type
-    const ext = assetPath.split(".").pop()?.toLowerCase();
-    const contentTypes: Record<string, string> = {
-      js: "application/javascript",
-      css: "text/css",
-      svg: "image/svg+xml",
-      png: "image/png",
-      jpg: "image/jpeg",
-      jpeg: "image/jpeg",
-    };
+      // Set appropriate content type
+      const ext = assetPath.split(".").pop()?.toLowerCase();
+      const contentTypes: Record<string, string> = {
+        js: "application/javascript",
+        css: "text/css",
+        svg: "image/svg+xml",
+        png: "image/png",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+      };
 
-    const contentType = contentTypes[ext || ""] || "application/octet-stream";
-    return c.body(content, 200, { "Content-Type": contentType });
+      const contentType = contentTypes[ext || ""] || "application/octet-stream";
+      return c.body(content, 200, { "Content-Type": contentType });
+    }
   }
 
   return c.text("Asset not found", 404);
@@ -269,34 +292,44 @@ app.get("/assets/*", (c) => {
 
 // Serve vite.svg from admin-ui/dist
 app.get("/vite.svg", (c) => {
-  const svgPath = join(process.cwd(), "admin-ui", "dist", "vite.svg");
-  if (existsSync(svgPath)) {
-    const content = readFileSync(svgPath);
-    return c.body(content, 200, { "Content-Type": "image/svg+xml" });
+  const distPath = resolveAdminUiPath();
+  if (distPath) {
+    const svgPath = join(distPath, "vite.svg");
+    if (existsSync(svgPath)) {
+      const content = readFileSync(svgPath);
+      return c.body(content, 200, { "Content-Type": "image/svg+xml" });
+    }
   }
   return c.text("Not found", 404);
 });
 
 // Serve static files from admin-ui/dist (production build)
 app.get("/admin", (c) => {
-  const indexPath = join(process.cwd(), "admin-ui", "dist", "index.html");
-  if (existsSync(indexPath)) {
-    const html = readFileSync(indexPath, "utf-8");
-    return c.html(html);
+  const distPath = resolveAdminUiPath();
+
+  if (distPath) {
+    const indexPath = join(distPath, "index.html");
+    if (existsSync(indexPath)) {
+      const html = readFileSync(indexPath, "utf-8");
+      return c.html(html);
+    }
   }
 
   // Debugging Vercel file system
   try {
     const debug = {
       cwd: process.cwd(),
+      __dirname,
+      candidates: [
+        join(process.cwd(), "admin-ui", "dist"),
+        join(process.cwd(), "backend", "admin-ui", "dist"),
+      ],
       filesInCwd: readdirSync(process.cwd()),
-      adminUiPath: join(process.cwd(), "admin-ui"),
-      adminUiExists: existsSync(join(process.cwd(), "admin-ui")),
-      distPath: join(process.cwd(), "admin-ui", "dist"),
-      distExists: existsSync(join(process.cwd(), "admin-ui", "dist")),
-      filesInDist: existsSync(join(process.cwd(), "admin-ui", "dist"))
-        ? readdirSync(join(process.cwd(), "admin-ui", "dist"))
-        : "dist not found",
+      // Check if backend dir exists in cwd
+      backendExists: existsSync(join(process.cwd(), "backend")),
+      backendFiles: existsSync(join(process.cwd(), "backend"))
+        ? readdirSync(join(process.cwd(), "backend"))
+        : "N/A",
     };
     return c.json({ error: "Admin UI not found", debug }, 404);
   } catch (e: any) {
