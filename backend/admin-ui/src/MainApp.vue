@@ -5,7 +5,11 @@ import ServerForm from "./components/ServerForm.vue";
 import ServerList from "./components/ServerList.vue";
 import DeleteConfirm from "./components/DeleteConfirm.vue";
 import GameRangeManager from "./components/GameRangeManager.vue";
+import Login from "./components/Login.vue";
 import type { Server } from "./types/server";
+import { useAuth } from "./composables/useAuth";
+
+const { isAuthenticated, logout } = useAuth();
 
 const {
   filteredServers,
@@ -63,10 +67,15 @@ function toggleAddForm() {
   showAddForm.value = !showAddForm.value;
   editingServer.value = null;
 }
+
+function handleLogout() {
+  logout();
+}
 </script>
 
 <template>
-  <div class="app">
+  <Login v-if="!isAuthenticated" />
+  <div v-else class="app">
     <header class="header">
       <div class="header-content">
         <div class="header-left">
@@ -93,6 +102,23 @@ function toggleAddForm() {
           @click="toggleAddForm"
         >
           + Add Server
+        </button>
+        <button class="btn-logout" @click="handleLogout" title="Logout">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
         </button>
       </div>
     </header>
@@ -484,5 +510,25 @@ function toggleAddForm() {
   outline: none;
   border-color: #78716c;
   box-shadow: 0 0 0 3px rgba(120, 113, 108, 0.1);
+}
+
+.btn-logout {
+  background: transparent;
+  border: 1px solid #e7e5e4;
+  color: #78716c;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-logout:hover {
+  background: #fee2e2;
+  color: #ef4444;
+  border-color: #fecaca;
 }
 </style>

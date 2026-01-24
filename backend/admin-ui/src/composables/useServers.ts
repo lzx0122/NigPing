@@ -1,10 +1,13 @@
 import { ref, computed } from "vue";
 import type { Server, ServerStats } from "../types/server";
+import { useAuth } from "./useAuth";
 
 const API_BASE = "/api";
 
 export function useServers() {
+  const { getAuthHeaders, logout } = useAuth();
   const servers = ref<Server[]>([]);
+
   const loading = ref(false);
   const error = ref<string | null>(null);
   const searchQuery = ref("");
@@ -54,10 +57,18 @@ export function useServers() {
     try {
       const response = await fetch(`${API_BASE}/servers`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
         body: JSON.stringify({ ip, region }),
       });
+      if (response.status === 401) {
+        logout();
+        throw new Error("Session expired");
+      }
       if (!response.ok) throw new Error("Failed to add server");
+
       await fetchServers();
       return true;
     } catch (e) {
@@ -77,10 +88,18 @@ export function useServers() {
         `${API_BASE}/servers/${encodeURIComponent(oldIp)}`,
         {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
           body: JSON.stringify({ ip: newIp, region }),
         },
       );
+      if (response.status === 401) {
+        logout();
+        throw new Error("Session expired");
+      }
+
       if (!response.ok) throw new Error("Failed to update server");
       await fetchServers();
       return true;
@@ -101,8 +120,14 @@ export function useServers() {
         `${API_BASE}/servers/${encodeURIComponent(ip)}`,
         {
           method: "DELETE",
+          headers: getAuthHeaders(),
         },
       );
+      if (response.status === 401) {
+        logout();
+        throw new Error("Session expired");
+      }
+
       if (!response.ok) throw new Error("Failed to delete server");
       await fetchServers();
       return true;

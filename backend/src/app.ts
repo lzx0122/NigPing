@@ -7,11 +7,81 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 import { supabase } from "./db/supabase.js";
+import { jwt, sign } from "hono/jwt";
+import { comparePassword } from "./auth.js";
 
 const app = new Hono();
 
 // Enable CORS for frontend development
 app.use("/*", cors());
+
+// JWT Middleware
+app.use("/api/*", async (c, next) => {
+  // Allow public access to login
+  if (c.req.path === "/api/auth/login") {
+    await next();
+    return;
+  }
+
+  // Allow public read access (GET)
+  if (c.req.method === "GET") {
+    await next();
+    return;
+  }
+
+  // Protect all other API routes (POST, PUT, DELETE)
+  const jwtMiddleware = jwt({
+    secret: process.env.JWT_SECRET || "default_dev_secret",
+    alg: "HS256",
+  });
+  return jwtMiddleware(c, next);
+});
+
+// === Auth ===
+
+app.post("/api/auth/login", async (c) => {
+  try {
+    const { username, password } = await c.req.json<{
+      username: string;
+      password: string;
+    }>();
+
+    if (!username || !password) {
+      return c.json({ error: "Username and password required" }, 400);
+    }
+
+    // Fetch user from DB
+    const { data: user, error } = await supabase
+      .from("admin_users")
+      .select("*")
+      .eq("username", username)
+      .single();
+
+    if (error || !user) {
+      return c.json({ error: "Invalid credentials" }, 401);
+    }
+
+    // Verify password
+    const valid = await comparePassword(password, user.password_hash);
+    if (!valid) {
+      return c.json({ error: "Invalid credentials" }, 401);
+    }
+
+    // Generate Token
+    const payload = {
+      sub: user.id,
+      username: user.username,
+      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24, // 24 hours
+    };
+    const secret = process.env.JWT_SECRET || "default_dev_secret";
+    const token = await sign(payload, secret);
+
+    return c.json({ token, username: user.username });
+  } catch (e) {
+    console.error("Login error:", e);
+    return c.json({ error: "Login failed" }, 500);
+  }
+});
 
 app.get("/", (c) => {
   return c.redirect("/admin");
