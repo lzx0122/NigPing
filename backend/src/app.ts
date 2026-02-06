@@ -51,15 +51,20 @@ app.post("/api/auth/login", async (c) => {
       return c.json({ error: "Username and password required" }, 400);
     }
 
-    // Fetch user from DB
+    // Fetch user from DB (VPN users table)
     const { data: user, error } = await supabase
-      .from("admin_users")
+      .from("users")
       .select("*")
       .eq("username", username)
       .single();
 
     if (error || !user) {
       return c.json({ error: "Invalid credentials" }, 401);
+    }
+
+    // Check if user is active
+    if (!user.is_active) {
+      return c.json({ error: "Account is disabled" }, 403);
     }
 
     // Verify password

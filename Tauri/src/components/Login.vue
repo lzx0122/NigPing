@@ -11,20 +11,31 @@ const error = ref("");
 const loading = ref(false);
 
 async function handleSubmit() {
+  console.log("📝 [LoginForm] Form submitted");
+  console.log("📝 [LoginForm] Username:", username.value);
+  console.log("📝 [LoginForm] Password length:", password.value.length);
+
   if (!username.value || !password.value) {
+    console.warn("⚠️ [LoginForm] Missing username or password");
     error.value = "請輸入使用者名稱和密碼";
     return;
   }
 
   loading.value = true;
   error.value = "";
+  console.log("📝 [LoginForm] Calling login function...");
 
   const success = await login(username.value, password.value);
 
+  console.log("📝 [LoginForm] Login result:", success);
+
   if (!success) {
+    console.error("❌ [LoginForm] Login failed");
     error.value = "使用者名稱或密碼錯誤";
     // Clear password on failed login
     password.value = "";
+  } else {
+    console.log("✅ [LoginForm] Login successful, should redirect to main app");
   }
 
   loading.value = false;

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +28,30 @@ import Login from "@/components/Login.vue";
 import { useAuth } from "@/composables/useAuth";
 
 const { isAuthenticated, logout } = useAuth();
+
+console.log("🚀 [App] App component loaded");
+console.log("🚀 [App] Initial authentication state:", isAuthenticated.value);
+console.log(
+  "🚀 [App] localStorage token:",
+  localStorage.getItem("token") ? "exists" : "missing",
+);
+console.log(
+  "🚀 [App] localStorage username:",
+  localStorage.getItem("username"),
+);
+
+// Watch for authentication changes
+watch(isAuthenticated, (newValue, oldValue) => {
+  console.log("🔄 [App] Authentication state changed:", {
+    from: oldValue,
+    to: newValue,
+  });
+});
+
+onMounted(() => {
+  console.log("🚀 [App] App mounted");
+  console.log("🚀 [App] Current auth state:", isAuthenticated.value);
+});
 
 // === 狀態管理 ===
 type ViewState = "home" | "details";
