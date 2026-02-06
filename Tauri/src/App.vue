@@ -11,7 +11,6 @@ import {
 import {
   Zap,
   Activity,
-  ShieldCheck,
   Gamepad2,
   ChevronLeft,
   Server as ServerIcon,
@@ -19,11 +18,16 @@ import {
   StopCircle,
   List,
   X,
+  LogOut,
 } from "lucide-vue-next";
 import { GAMES, type Game, type Server } from "@/data/games";
 import ServerGlobe from "@/components/ServerGlobe.vue";
 import TitleBar from "@/components/TitleBar.vue";
 import ServerDetection from "@/components/ServerDetection.vue";
+import Login from "@/components/Login.vue";
+import { useAuth } from "@/composables/useAuth";
+
+const { isAuthenticated, logout } = useAuth();
 
 // === 狀態管理 ===
 type ViewState = "home" | "details";
@@ -138,7 +142,9 @@ const handleDisconnect = async () => {
 </script>
 
 <template>
+  <Login v-if="!isAuthenticated" />
   <div
+    v-else
     class="h-screen w-full bg-black text-zinc-100 flex flex-col overflow-hidden font-sans selection:bg-white selection:text-black"
   >
     <!-- Custom Title Bar -->
@@ -192,7 +198,15 @@ const handleDisconnect = async () => {
           </Button>
         </nav>
 
-        <div class="p-6 border-t border-zinc-900">
+        <div class="p-6 border-t border-zinc-900 space-y-3">
+          <Button
+            variant="ghost"
+            class="w-full justify-start gap-3 h-10 font-medium text-zinc-500 hover:text-red-400 hover:bg-zinc-900/50"
+            @click="logout"
+          >
+            <LogOut class="w-4 h-4" />
+            登出
+          </Button>
           <div
             class="flex items-center justify-between text-xs text-zinc-600 font-mono"
           >
