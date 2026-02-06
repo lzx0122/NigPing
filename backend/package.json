@@ -4,6 +4,7 @@
   "description": "Backend server for NigPing",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "dev:all": "concurrently \"pnpm run dev\" \"pnpm run admin:dev\" --names \"backend,admin\" --prefix-colors \"blue,magenta\"",
     "start": "node dist/index.js",
     "build": "pnpm run admin:build && tsc",
     "admin:dev": "cd admin-ui && pnpm run dev",
@@ -19,6 +20,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
+    "concurrently": "^8.2.2",
     "tsx": "^4.7.0",
     "typescript": "^5.3.0"
   },

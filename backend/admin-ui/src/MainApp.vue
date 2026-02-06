@@ -5,6 +5,7 @@ import ServerForm from "./components/ServerForm.vue";
 import ServerList from "./components/ServerList.vue";
 import DeleteConfirm from "./components/DeleteConfirm.vue";
 import GameRangeManager from "./components/GameRangeManager.vue";
+import UserManagement from "./components/UserManagement.vue";
 import Login from "./components/Login.vue";
 import type { Server } from "./types/server";
 import { useAuth } from "./composables/useAuth";
@@ -23,7 +24,7 @@ const {
   deleteServer,
 } = useServers();
 
-const currentTab = ref<"servers" | "ranges">("servers");
+const currentTab = ref<"servers" | "ranges" | "users">("servers");
 const showAddForm = ref(false);
 const editingServer = ref<Server | null>(null);
 const deletingServerIp = ref<string | null>(null);
@@ -95,6 +96,12 @@ function handleLogout() {
           >
             Game Ranges
           </button>
+          <button
+            :class="['tab-btn', currentTab === 'users' ? 'active' : '']"
+            @click="currentTab = 'users'"
+          >
+            Users
+          </button>
         </div>
         <button
           v-if="currentTab === 'servers'"
@@ -125,8 +132,13 @@ function handleLogout() {
 
     <main class="main">
       <div class="container">
+        <!-- Users Tab -->
+        <div v-if="currentTab === 'users'">
+          <UserManagement />
+        </div>
+
         <!-- Game Ranges Tab -->
-        <div v-if="currentTab === 'ranges'" class="space-y-6">
+        <div v-else-if="currentTab === 'ranges'" class="space-y-6">
           <div class="game-selector-card">
             <label class="form-label">Select Game</label>
             <select v-model="selectedGameId" class="form-select">

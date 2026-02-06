@@ -8,7 +8,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 import { supabase } from "./db/supabase.js";
 import { jwt, sign } from "hono/jwt";
-import { comparePassword } from "./auth.js";
+import { comparePassword, hashPassword } from "./auth.js";
+import { generateRandomPassword } from "./password-utils.js";
 
 const app = new Hono();
 
@@ -85,6 +86,163 @@ app.post("/api/auth/login", async (c) => {
 
 app.get("/", (c) => {
   return c.redirect("/admin");
+});
+
+// === User Management ===
+
+// Get all users (excluding password hashes)
+app.get("/api/users", async (c) => {
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("id, username, created_at, updated_at, is_active")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    return c.json(data || []);
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    return c.json({ error: "Failed to fetch users" }, 500);
+  }
+});
+
+// Create new user
+app.post("/api/users", async (c) => {
+  try {
+    const body = await c.req.json<{
+      username: string;
+      password?: string;
+      autoGenerate?: boolean;
+    }>();
+
+    if (!body.username) {
+      return c.json({ error: "Username is required" }, 400);
+    }
+
+    // Generate password if requested, otherwise use provided password
+    let password: string;
+    let generatedPassword: string | undefined;
+
+    if (body.autoGenerate) {
+      password = generateRandomPassword();
+      generatedPassword = password; // Return to admin for one-time view
+    } else if (body.password) {
+      password = body.password;
+    } else {
+      return c.json(
+        { error: "Either password or autoGenerate must be provided" },
+        400,
+      );
+    }
+
+    // Hash the password
+    const passwordHash = await hashPassword(password);
+
+    // Insert user into database
+    const { data, error } = await supabase
+      .from("users")
+      .insert([
+        {
+          username: body.username,
+          password_hash: passwordHash,
+        },
+      ])
+      .select("id, username, created_at, updated_at, is_active")
+      .single();
+
+    if (error) {
+      // Check for unique constraint violation
+      if (error.code === "23505") {
+        return c.json({ error: "Username already exists" }, 409);
+      }
+      throw error;
+    }
+
+    // Return user data with password if auto-generated
+    return c.json(
+      {
+        user: data,
+        password: generatedPassword,
+      },
+      201,
+    );
+  } catch (error) {
+    console.error("Error creating user:", error);
+    return c.json({ error: "Failed to create user" }, 500);
+  }
+});
+
+// Delete user
+app.delete("/api/users/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+
+    const { error } = await supabase.from("users").delete().eq("id", id);
+
+    if (error) throw error;
+
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting user:", error);
+    return c.json({ error: "Failed to delete user" }, 500);
+  }
+});
+
+// Reset user password
+app.put("/api/users/:id/password", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const body = await c.req.json<{
+      password?: string;
+      autoGenerate?: boolean;
+    }>();
+
+    // Generate password if requested, otherwise use provided password
+    let password: string;
+    let generatedPassword: string | undefined;
+
+    if (body.autoGenerate) {
+      password = generateRandomPassword();
+      generatedPassword = password;
+    } else if (body.password) {
+      password = body.password;
+    } else {
+      return c.json(
+        { error: "Either password or autoGenerate must be provided" },
+        400,
+      );
+    }
+
+    // Hash the password
+    const passwordHash = await hashPassword(password);
+
+    // Update user password
+    const { data, error } = await supabase
+      .from("users")
+      .update({
+        password_hash: passwordHash,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select("id, username, created_at, updated_at, is_active")
+      .single();
+
+    if (error) {
+      if (error.code === "PGRST116") {
+        return c.json({ error: "User not found" }, 404);
+      }
+      throw error;
+    }
+
+    return c.json({
+      user: data,
+      password: generatedPassword,
+    });
+  } catch (error) {
+    console.error("Error resetting password:", error);
+    return c.json({ error: "Failed to reset password" }, 500);
+  }
 });
 
 // Get all servers

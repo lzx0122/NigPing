@@ -87,3 +87,31 @@ CREATE POLICY "Allow public all access on game_ip_ranges" ON game_ip_ranges
 ## å®Œæˆå¾Œ
 
 åŸ·è¡Œå®Œ SQL è…³æœ¬å¾Œï¼Œè«‹å‘Šè¨´æˆ‘ï¼Œæˆ‘æœƒå•Ÿå‹• backend é€²è¡Œæ¸¬è©¦ã€‚
+
+## 5. «Ø¥ß users ¸ê®Æªí (VPN ¨Ï¥ÎªÌºŞ²z)
+
+```sql
+-- Create a table for VPN users
+CREATE TABLE public.users (
+  id UUID NOT NULL DEFAULT gen_random_uuid(),
+  username TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  CONSTRAINT users_pkey PRIMARY KEY (id),
+  CONSTRAINT users_username_key UNIQUE (username)
+);
+
+-- Add index for faster lookups
+CREATE INDEX users_username_idx ON public.users (username);
+CREATE INDEX users_is_active_idx ON public.users (is_active);
+
+-- ±Ò¥Î RLS
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+
+-- ¤¹³\©Ò¦³¤HÅª¼g (¶}µo¶¥¬q)
+-- ª`·N¡G¥Í²£Àô¹ÒÀ³¸Ó­­¨î¥u¦³ºŞ²z­û¥i¥H­×§ï
+CREATE POLICY "Allow public all access on users" ON users
+  FOR ALL USING (true) WITH CHECK (true);
+```
