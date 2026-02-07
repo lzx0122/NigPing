@@ -10,6 +10,7 @@ import { supabase } from "./db/supabase.js";
 import { jwt, sign } from "hono/jwt";
 import { comparePassword, hashPassword } from "./auth.js";
 import { generateRandomPassword } from "./password-utils.js";
+import vpn from "./api/vpn.js";
 
 const app = new Hono();
 
@@ -24,13 +25,13 @@ app.use("/api/*", async (c, next) => {
     return;
   }
 
-  // Allow public read access (GET)
-  if (c.req.method === "GET") {
+  // Allow public read access (GET), EXCEPT for VPN routes which contain sensitive user data
+  if (c.req.method === "GET" && !c.req.path.startsWith("/api/vpn/")) {
     await next();
     return;
   }
 
-  // Protect all other API routes (POST, PUT, DELETE)
+  // Protect all other API routes (POST, PUT, DELETE, and GET /api/vpn/*)
   const jwtMiddleware = jwt({
     secret: process.env.JWT_SECRET || "default_dev_secret",
     alg: "HS256",
