@@ -1,26 +1,60 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
+import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
 import { useVpnProfile } from "@/composables/useVpnProfile";
-import { Loader2, Monitor, Server } from "lucide-vue-next";
+import { Loader2, Monitor } from "lucide-vue-next";
 
-const { servers, fetchServers, registerProfile, generateKeys } =
-  useVpnProfile();
+const { registerProfile, generateKeys } = useVpnProfile();
 
 const deviceName = ref("");
-const selectedServerIp = ref("");
 const isRegistering = ref(false);
 const error = ref<string | null>(null);
+const deviceCount = ref(0);
+const isLoadingDeviceName = ref(true);
 
 const emit = defineEmits(["profile-registered"]);
 
-onMounted(() => {
-  fetchServers();
+onMounted(async () => {
+  await fetchDeviceCount();
+  await autoDetectDeviceName();
 });
 
+async function autoDetectDeviceName() {
+  try {
+    const name = await invoke<string>("get_device_name");
+    deviceName.value = name;
+  } catch (e) {
+    console.error("Failed to get device name:", e);
+    deviceName.value = "My Device";
+  } finally {
+    isLoadingDeviceName.value = false;
+  }
+}
+
+async function fetchDeviceCount() {
+  try {
+    const token = localStorage.getItem("auth_token");
+    if (!token) return;
+
+    const response = await fetch("http://localhost:3000/api/vpn/profiles", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (response.ok) {
+      const profiles = await response.json();
+      deviceCount.value = profiles.length;
+    }
+  } catch (e) {
+    console.error("Failed to fetch device count:", e);
+  }
+}
+
 async function handleRegister() {
-  if (!deviceName.value || !selectedServerIp.value) {
-    error.value = "Please fill in all fields.";
+  if (!deviceName.value) {
+    error.value = "Please enter a device name.";
     return;
   }
 
@@ -32,37 +66,28 @@ async function handleRegister() {
     const keys = generateKeys();
     console.log("Keys generated:", keys.publicKey);
 
-    // 2. Call API
+    // 2. Call API (no server selection needed)
     const result = await registerProfile(
       deviceName.value,
-      selectedServerIp.value,
       keys.privateKey,
       keys.publicKey,
     );
 
     console.log("Registration success:", result);
 
-    // 3. Save Private Key locally (crucial!)
-    // For MVP, we save to localStorage with a prefix.
-    // Ideally use tauri-plugin-store or safe storage.
-    const profileId = "default"; // Simplified for single profile per device context
+    // 3. Save profile ID and private key locally
+    const profileId = result.profile_id;
     const storageKey = `vpn_profile_${profileId}`;
 
-    // Construct full config structure to save
     const vpnConfig = {
+      profileId,
+      deviceName: deviceName.value,
       privateKey: keys.privateKey,
-      address: result.assigned_ip, // e.g., 10.0.0.5/32 (actually usually we want /24 or /32)
-      // The API returns just the IP usually "10.0.0.5".
-      // We might need to append /32 or use /24 if that's the topology.
-      // Plan said: assigned_ip
-
-      serverPublicKey: result.server_public_key,
-      serverEndpoint: result.server_endpoint,
-      allowedIps: result.allowed_ips || "0.0.0.0/0",
-      dns: "1.1.1.1", // Hardcoded or returned
+      publicKey: keys.publicKey,
     };
 
     localStorage.setItem(storageKey, JSON.stringify(vpnConfig));
+    localStorage.setItem("vpn_config", JSON.stringify(vpnConfig));
 
     emit("profile-registered", vpnConfig);
   } catch (e: any) {
@@ -93,52 +118,26 @@ async function handleRegister() {
     <div class="space-y-4">
       <!-- Device Name Input -->
       <div class="space-y-2">
-        <label class="text-xs uppercase font-bold text-zinc-500 tracking-wider"
-          >Device Name</label
-        >
+        <div class="flex items-center justify-between">
+          <label
+            class="text-xs uppercase font-bold text-zinc-500 tracking-wider"
+            >Device Name</label
+          >
+          <span class="text-xs text-zinc-600">{{ deviceCount }}/5 devices</span>
+        </div>
         <input
           v-model="deviceName"
           type="text"
           placeholder="e.g. My Gaming PC"
-          class="w-full bg-black border border-zinc-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-white transition-colors"
+          :disabled="isLoadingDeviceName"
+          class="w-full bg-black border border-zinc-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-white transition-colors disabled:opacity-50"
         />
-      </div>
-
-      <!-- Server Selection -->
-      <div class="space-y-2">
-        <label class="text-xs uppercase font-bold text-zinc-500 tracking-wider"
-          >Select Server</label
-        >
-        <div class="grid gap-2">
-          <div
-            v-for="server in servers"
-            :key="server.ip"
-            @click="selectedServerIp = server.ip"
-            class="flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all hover:bg-zinc-800"
-            :class="
-              selectedServerIp === server.ip
-                ? 'bg-zinc-800 border-white text-white'
-                : 'bg-black border-zinc-800 text-zinc-400'
-            "
-          >
-            <Server class="w-4 h-4" />
-            <div class="flex-1">
-              <div class="font-bold text-sm">{{ server.region }}</div>
-              <div class="text-xs font-mono opacity-60">{{ server.ip }}</div>
-            </div>
-            <div
-              v-if="selectedServerIp === server.ip"
-              class="w-2 h-2 rounded-full bg-green-500"
-            ></div>
-          </div>
-
-          <div
-            v-if="servers.length === 0"
-            class="text-zinc-500 text-sm italic py-2"
-          >
-            No servers available. Please deploy a VPS Agent first.
-          </div>
-        </div>
+        <p v-if="isLoadingDeviceName" class="text-xs text-zinc-500 italic">
+          Detecting device name...
+        </p>
+        <p class="text-xs text-zinc-400">
+          ✨ You can connect to any VPS server after registration
+        </p>
       </div>
 
       <!-- Error Message -->
@@ -152,7 +151,7 @@ async function handleRegister() {
       <!-- Register Button -->
       <Button
         @click="handleRegister"
-        :disabled="isRegistering || !deviceName || !selectedServerIp"
+        :disabled="isRegistering || !deviceName"
         class="w-full h-12 bg-white text-black hover:bg-zinc-200 font-bold"
       >
         <Loader2 v-if="isRegistering" class="w-4 h-4 mr-2 animate-spin" />

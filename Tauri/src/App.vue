@@ -16,12 +16,15 @@ import { GAMES, type Game, type Server } from "@/data/games";
 import TitleBar from "@/components/TitleBar.vue";
 import Login from "@/components/Login.vue";
 import VPNRegistration from "@/components/VPNRegistration.vue";
+import DeviceManager from "@/components/DeviceManager.vue";
 import { useAuth } from "@/composables/useAuth";
+import { useVpnProfile } from "@/composables/useVpnProfile";
 
 const { isAuthenticated, logout } = useAuth();
+const { connectToServer } = useVpnProfile();
 
 // === State Management ===
-type ViewState = "home" | "details" | "register";
+type ViewState = "home" | "details" | "register" | "devices";
 const currentView = ref<ViewState>("home");
 const selectedGame = ref<Game | null>(null);
 const selectedServer = ref<Server | null>(null);
@@ -108,39 +111,39 @@ const fetchGameRanges = async (gameId: string) => {
 };
 
 // === Config Generation ===
-const getWgConfig = () => {
+const getWgConfig = (serverConfig: any) => {
   const allowedIps = Array.from(gameIpRanges.value).join(", ");
 
   if (!vpnConfig.value) {
     throw new Error("No VPN configuration found. Please register first.");
   }
 
-  // Use dynamic values from vpnConfig
-  // If allowedIps is empty (no game selected or no ranges), use 0.0.0.0/0 for full VPN?
-  // Strategy: If user explicitly selects a game, we try to split-tunnel that game (if supported by OS/client)
-  // But usually generic VPN clients just route everything or specific allowedIPs.
-  // Here we inject the allowedIPs.
   const routeIps = allowedIps || "0.0.0.0/0";
 
   return `
 [Interface]
 PrivateKey = ${vpnConfig.value.privateKey}
-Address = ${vpnConfig.value.address}
-DNS = ${vpnConfig.value.dns || "1.1.1.1"}
+Address = ${serverConfig.assigned_ip}
+DNS = 1.1.1.1
 MTU = 1280
 
 [Peer]
-PublicKey = ${vpnConfig.value.serverPublicKey}
+PublicKey = ${serverConfig.server_public_key}
 PresharedKey = JbLLJPvjfXhykHg8mDrNdonHhNTlAYZNh9v3u8bbNzI=
 AllowedIPs = ${routeIps}
-Endpoint = ${vpnConfig.value.serverEndpoint}
+Endpoint = ${serverConfig.server_endpoint}
 PersistentKeepalive = 25
 `;
 };
 
 const handleConnect = async () => {
-  if (!vpnConfig.value) {
+  if (!vpnConfig.value || !vpnConfig.value.profileId) {
     alert("Please register a VPN profile first.");
+    return;
+  }
+
+  if (!selectedServer.value) {
+    alert("Please select a server.");
     return;
   }
 
@@ -148,15 +151,24 @@ const handleConnect = async () => {
   status.value = `正在連線...`;
 
   try {
-    const configContent = getWgConfig();
-    const ipv4 = vpnConfig.value.address.split("/")[0];
+    // Get server config from backend
+    const serverConfig = await connectToServer(
+      vpnConfig.value.profileId,
+      selectedServer.value.endpoint.split(":")[0], // Extract IP from endpoint
+    );
+
+    console.log("Server config:", serverConfig);
+
+    // Generate WireGuard config
+    const configContent = getWgConfig(serverConfig);
+    const ipv4 = serverConfig.assigned_ip.split("/")[0];
 
     await invoke("connect_korea", {
       configContent,
       ipv4Address: ipv4,
     });
 
-    status.value = `已連線 - ${vpnConfig.value.serverEndpoint}`;
+    status.value = `已連線 - ${serverConfig.server_endpoint}`;
     isConnected.value = true;
     currentPing.value = Math.floor(Math.random() * 10) + 20;
   } catch (error) {
@@ -242,6 +254,20 @@ const handleDisconnect = async () => {
           >
             <Gamepad2 class="w-4 h-4" />
             遊戲庫
+          </Button>
+
+          <Button
+            variant="ghost"
+            class="w-full justify-start gap-3 h-10 font-medium"
+            :class="
+              currentView === 'devices'
+                ? 'bg-zinc-900 text-white'
+                : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900/50'
+            "
+            @click="currentView = 'devices'"
+          >
+            <ServerIcon class="w-4 h-4" />
+            設備管理
           </Button>
 
           <Button
@@ -370,6 +396,11 @@ const handleDisconnect = async () => {
                 </CardHeader>
               </Card>
             </div>
+          </div>
+
+          <!-- View: Device Management -->
+          <div v-else-if="currentView === 'devices'">
+            <DeviceManager />
           </div>
 
           <!-- View: Game Details (Server Select) -->

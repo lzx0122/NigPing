@@ -1,7 +1,6 @@
 import { ref } from "vue";
-import { generateKeyPair } from "@stablelib/x25519";
+import { scalarMultBase } from "@stablelib/x25519";
 import { encode } from "@stablelib/base64";
-import { randomBytes } from "@stablelib/random";
 import { useAuth } from "./useAuth";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
@@ -33,18 +32,21 @@ export function useVpnProfile() {
 
   // Generate WireGuard Key Pair (Base64 encoded)
   function generateKeys() {
-    // Generate private key (32 bytes)
-    const privateKeyBytes = randomBytes(32);
-    // Clamp private key (standard for X25519)
+    // Generate private key (32 bytes) using native crypto API
+    const privateKeyBytes = new Uint8Array(32);
+    crypto.getRandomValues(privateKeyBytes);
+
+    // Clamp private key (standard for X25519/Curve25519)
     privateKeyBytes[0] &= 248;
     privateKeyBytes[31] &= 127;
     privateKeyBytes[31] |= 64;
 
-    const keyPair = generateKeyPair(privateKeyBytes);
+    // Generate public key from private key
+    const publicKeyBytes = scalarMultBase(privateKeyBytes);
 
     return {
-      privateKey: encode(keyPair.secretKey),
-      publicKey: encode(keyPair.publicKey),
+      privateKey: encode(privateKeyBytes),
+      publicKey: encode(publicKeyBytes),
     };
   }
 
@@ -84,8 +86,7 @@ export function useVpnProfile() {
 
   async function registerProfile(
     deviceName: string,
-    serverIp: string,
-    privateKey: string,
+    _privateKey: string, // Not sent to server, caller should save this locally
     publicKey: string,
   ) {
     isLoading.value = true;
@@ -100,7 +101,6 @@ export function useVpnProfile() {
         body: JSON.stringify({
           publicKey,
           deviceName,
-          serverIp,
         }),
       });
 
@@ -114,8 +114,6 @@ export function useVpnProfile() {
       // Refresh profiles list
       await fetchProfiles();
 
-      // Ideally, save the private key locally securely associated with this profile ID
-      // For now, we return it so the component can handle storage/config generation
       return result;
     } catch (e: any) {
       console.error("Register Profile Error:", e);
@@ -126,9 +124,36 @@ export function useVpnProfile() {
     }
   }
 
-  async function connectToProfile(profile: VpnProfile, privateKey: string) {
-    // Logic to configure WireGuard via Tauri command would go here or be returned
-    // This helper could format the config string
+  async function connectToServer(profileId: string, serverIp: string) {
+    isLoading.value = true;
+    error.value = null;
+    try {
+      const response = await fetch(`${API_URL}/api/vpn/connect`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({
+          profileId,
+          serverIp,
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || "Connection failed");
+      }
+
+      const result = await response.json();
+      return result;
+    } catch (e: any) {
+      console.error("Connect to Server Error:", e);
+      error.value = e.message || "Unknown error";
+      throw e;
+    } finally {
+      isLoading.value = false;
+    }
   }
 
   return {
@@ -140,5 +165,6 @@ export function useVpnProfile() {
     fetchServers,
     fetchProfiles,
     registerProfile,
+    connectToServer,
   };
 }
