@@ -1,0 +1,22 @@
+{
+  "name": "vps-agent",
+  "version": "1.0.0",
+  "description": "WireGuard Agent for NigPing",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.8.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "dotenv": "^16.4.0",
+    "hono": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  }
+}

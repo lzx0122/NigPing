@@ -1,0 +1,28 @@
+version: "3"
+services:
+  vps-agent:
+    # Use image from Docker Hub if running on VPS
+    image: ${DOCKER_IMAGE_NAME:-nigping-vps-agent:latest}
+    # Fallback to building locally if source is present (optional)
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    network_mode: "host" # We need to manage the host's networking (wg0)
+    cap_add:
+      - NET_ADMIN # Required for WireGuard
+    environment:
+      # Connection to your Management Backend (Supabase)
+      - SUPABASE_URL=https://your-project.supabase.co
+      - SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+      # Optional: Manual Override (otherwise auto-detected)
+      # - PUBLIC_IP=1.2.3.4
+
+      # Health Check Port
+      - PORT=3000
+    volumes:
+      # Persistent Config (so we don't lose keys on reboot)
+      - ./wg0.conf:/etc/wireguard/wg0.conf
+      - ./private.key:/etc/wireguard/private.key
+      - ./public.key:/etc/wireguard/public.key

@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+.git
+.gitignore
+publish.sh
+install.sh
+publish.ps1
