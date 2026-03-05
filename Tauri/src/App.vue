@@ -91,9 +91,10 @@ const gameIpRanges = ref<Set<string>>(new Set());
 
 const fetchGameRanges = async (gameId: string) => {
   try {
-    const ranges = (await fetch(
-      `http://localhost:3000/api/games/${gameId}/ranges`,
-    ).then((res) => res.json())) as string[];
+    const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+    const ranges = (await fetch(`${API_URL}/api/games/${gameId}/ranges`).then(
+      (res) => res.json(),
+    )) as string[];
 
     gameIpRanges.value.clear();
     ranges.forEach((range) => gameIpRanges.value.add(range));
