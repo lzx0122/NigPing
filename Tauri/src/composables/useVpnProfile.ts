@@ -1,7 +1,6 @@
 import { ref } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+
 import { useAuthStore } from "../stores/authStore";
-import { useVpnStore } from "../stores/vpnStore";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
@@ -29,7 +28,6 @@ export function useVpnProfile() {
   const error = ref<string | null>(null);
 
   const authStore = useAuthStore();
-  const vpnStore = useVpnStore();
 
   const getHeaders = () => {
     return {
@@ -39,19 +37,20 @@ export function useVpnProfile() {
   };
 
   /**
-   * Generates a new WireGuard keypair using Tauri Rust backend.
+   * Generates a new WireGuard keypair using @stablelib.
    */
   const generateKeys = async (): Promise<{
     privateKey: string;
     publicKey: string;
   }> => {
     try {
-      const keypair: { private_key: string; public_key: string } = await invoke(
-        "generate_wireguard_keypair",
-      );
+      const { generateKeyPair } = await import("@stablelib/x25519");
+      const { encode } = await import("@stablelib/base64");
+
+      const keypair = generateKeyPair();
       return {
-        privateKey: keypair.private_key,
-        publicKey: keypair.public_key,
+        privateKey: encode(keypair.secretKey),
+        publicKey: encode(keypair.publicKey),
       };
     } catch (e: any) {
       console.error("Failed to generate WireGuard keypair:", e);
@@ -101,11 +100,7 @@ export function useVpnProfile() {
     }
   }
 
-  async function registerProfile(
-    deviceName: string,
-    privateKey: string, // Not sent to server, caller should save this locally
-    publicKey: string,
-  ) {
+  async function registerProfile(deviceName: string, publicKey: string) {
     isLoading.value = true;
     error.value = null;
     try {
@@ -130,9 +125,6 @@ export function useVpnProfile() {
       }
 
       const result = await response.json();
-
-      // Save the private key locally
-      vpnStore.saveConfig(result.id, privateKey, "", "");
 
       // Refresh profiles list
       await fetchProfiles();

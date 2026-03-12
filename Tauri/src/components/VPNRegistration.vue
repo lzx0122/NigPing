@@ -72,11 +72,7 @@ async function handleRegister() {
     console.log("Keys generated:", keys.publicKey);
 
     // 2. Call API (no server selection needed)
-    const result = await registerProfile(
-      deviceName.value,
-      keys.privateKey,
-      keys.publicKey,
-    );
+    const result = await registerProfile(deviceName.value, keys.publicKey);
 
     console.log("Registration success:", result);
 

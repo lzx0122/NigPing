@@ -38,7 +38,8 @@ const currentPing = ref(0);
 const vpnConfig = ref<any>(null);
 
 // Load config from storage on mount
-onMounted(() => {
+onMounted(async () => {
+  await authStore.loadState();
   const stored = localStorage.getItem("vpn_config");
   if (stored) {
     try {
