@@ -17,10 +17,10 @@ import TitleBar from "@/components/TitleBar.vue";
 import Login from "@/components/Login.vue";
 import VPNRegistration from "@/components/VPNRegistration.vue";
 import DeviceManager from "@/components/DeviceManager.vue";
-import { useAuth } from "@/composables/useAuth";
+import { useAuthStore } from "@/stores/authStore";
 import { useVpnProfile } from "@/composables/useVpnProfile";
 
-const { isAuthenticated, logout } = useAuth();
+const authStore = useAuthStore();
 const { connectToServer } = useVpnProfile();
 
 // === State Management ===
@@ -52,7 +52,7 @@ onMounted(() => {
 
 // Watch auth and config to determine view
 watch(
-  [isAuthenticated, vpnConfig],
+  [() => authStore.isAuthenticated, vpnConfig],
   ([isAuth, config]) => {
     if (isAuth) {
       if (!config) {
@@ -188,7 +188,7 @@ const handleDisconnect = async () => {
 </script>
 
 <template>
-  <Login v-if="!isAuthenticated" />
+  <Login v-if="!authStore.isAuthenticated" />
 
   <!-- Registration View -->
   <div
@@ -266,7 +266,7 @@ const handleDisconnect = async () => {
           <Button
             variant="ghost"
             class="w-full justify-start gap-3 h-10 font-medium text-zinc-500 hover:text-red-400 hover:bg-zinc-900/50"
-            @click="logout"
+            @click="authStore.logout()"
           >
             <LogOut class="w-4 h-4" />
             登出

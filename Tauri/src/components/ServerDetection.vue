@@ -276,13 +276,8 @@ import {
   Activity,
   Zap,
   Power,
-  Info,
-  CheckCircle2,
-  AlertTriangle,
   Globe,
   MapPin,
-  ArrowUp,
-  ArrowDown,
   Plus,
   Loader2,
   Target,
@@ -321,78 +316,11 @@ const addingRoute = ref<string | null>(null);
 
 // History State
 const MAX_HISTORY = 60; // Keep last 60 data points
-interface DataPoint {
-  time: number;
-  send: number;
-  recv: number;
-  // ... other fields
-}
+
 // Note: original code had strict DataPoint interface, simplifying for replacement/merge
 const history = ref<any[]>([]);
 
 let pollInterval: number | null = null;
-
-// IP Range Helper
-function isIpInRanges(ip: string, ranges: Set<string>): boolean {
-  for (const range of ranges) {
-    if (isIpInCidr(ip, range)) return true;
-  }
-  return false;
-}
-
-function isIpInCidr(ip: string, cidr: string): boolean {
-  try {
-    const [rangeIp, bitsStr] = cidr.split("/");
-    const bits = parseInt(bitsStr, 10);
-
-    // Simple check for /24 and /16 which are most common here
-    // For more robust check, we'd convert to number
-    const ipParts = ip.split(".").map(Number);
-    const rangeParts = rangeIp.split(".").map(Number);
-
-    if (bits === 24) {
-      return (
-        ipParts[0] === rangeParts[0] &&
-        ipParts[1] === rangeParts[1] &&
-        ipParts[2] === rangeParts[2]
-      );
-    }
-    if (bits === 16) {
-      return ipParts[0] === rangeParts[0] && ipParts[1] === rangeParts[1];
-    }
-    // Fallback or todo: full bitwise check
-    return false;
-  } catch (e) {
-    return false;
-  }
-}
-
-async function reportNewIp(ip: string) {
-  if (!props.gameId) return;
-
-  // Create /24 range from IP
-  const parts = ip.split(".");
-  const newRange = `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
-
-  // Check if we already have it in local known ranges (to avoid spam)
-  if (props.knownRanges && isIpInRanges(ip, props.knownRanges)) return;
-
-  console.log(`Auto-detecting new range for ${ip}: ${newRange}`);
-
-  try {
-    await fetch(`http://localhost:3000/api/games/${props.gameId}/ranges`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ipRange: newRange }),
-    });
-
-    statusMessage.value = `自動新增網段: ${newRange}`;
-    statusType.value = "success";
-    emit("new-range-detected");
-  } catch (error) {
-    console.error("Failed to report new IP range:", error);
-  }
-}
 
 // Computed for Primary vs Others
 const sortedServers = computed(() => {
@@ -560,7 +488,7 @@ async function fetchServers() {
 async function addToRoutes(ip: string) {
   addingRoute.value = ip;
   try {
-    const result = await invoke<string>("add_detected_ip_to_routes", { ip });
+    await invoke<string>("add_detected_ip_to_routes", { ip });
     statusMessage.value = "已加入路由"; // Shortened
     statusType.value = "success";
   } catch (error) {
@@ -569,19 +497,6 @@ async function addToRoutes(ip: string) {
   } finally {
     addingRoute.value = null;
   }
-}
-
-function formatTime(isoString: string): string {
-  const date = new Date(isoString);
-  const now = new Date();
-  const diff = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-  if (diff < 60) return `${diff}s`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m`;
-  return date.toLocaleTimeString("zh-TW", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 // Cleanup

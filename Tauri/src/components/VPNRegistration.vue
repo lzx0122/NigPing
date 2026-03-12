@@ -3,9 +3,13 @@ import { ref, onMounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
 import { useVpnProfile } from "@/composables/useVpnProfile";
+import { useAuthStore } from "@/stores/authStore";
+import { useVpnStore } from "@/stores/vpnStore";
 import { Loader2, Monitor } from "lucide-vue-next";
 
 const { registerProfile, generateKeys } = useVpnProfile();
+const authStore = useAuthStore();
+const vpnStore = useVpnStore();
 
 const deviceName = ref("");
 const isRegistering = ref(false);
@@ -34,10 +38,11 @@ async function autoDetectDeviceName() {
 
 async function fetchDeviceCount() {
   try {
-    const token = localStorage.getItem("auth_token");
+    const token = authStore.token;
     if (!token) return;
 
-    const response = await fetch("http://localhost:3000/api/vpn/profiles", {
+    const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+    const response = await fetch(`${API_URL}/api/vpn/profiles`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -63,7 +68,7 @@ async function handleRegister() {
 
   try {
     // 1. Generate WireGuard Keys
-    const keys = generateKeys();
+    const keys = await generateKeys();
     console.log("Keys generated:", keys.publicKey);
 
     // 2. Call API (no server selection needed)
@@ -75,19 +80,18 @@ async function handleRegister() {
 
     console.log("Registration success:", result);
 
-    // 3. Save profile ID and private key locally
+    // 3. Save profile ID and private key securely to Pinia Store
     const profileId = result.profile_id;
-    const storageKey = `vpn_profile_${profileId}`;
 
-    const vpnConfig = {
+    // Explicitly call to Pinia VPN store to preserve state
+    await vpnStore.saveConfig(
       profileId,
-      deviceName: deviceName.value,
-      privateKey: keys.privateKey,
-      publicKey: keys.publicKey,
-    };
+      keys.privateKey,
+      result.server_endpoint || "",
+      result.assigned_ip || "",
+    );
 
-    localStorage.setItem(storageKey, JSON.stringify(vpnConfig));
-    localStorage.setItem("vpn_config", JSON.stringify(vpnConfig));
+    const vpnConfig = vpnStore.getVpnConfig();
 
     emit("profile-registered", vpnConfig);
   } catch (e: any) {

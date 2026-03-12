@@ -1,0 +1,6 @@
+﻿src/router/index.ts(1,48): error TS2307: Cannot find module 'vue-router' or its corresponding type declarations.
+src/router/index.ts(31,26): error TS7006: Parameter 'to' implicitly has an 'any' type.
+src/router/index.ts(31,30): error TS6133: 'from' is declared but its value is never read.
+src/router/index.ts(31,30): error TS7006: Parameter 'from' implicitly has an 'any' type.
+src/router/index.ts(31,36): error TS7006: Parameter 'next' implicitly has an 'any' type.
+src/views/SettingsView.vue(2,1): error TS6133: 'Button' is declared but its value is never read.

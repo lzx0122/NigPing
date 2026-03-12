@@ -1,7 +1,7 @@
 import { ref } from "vue";
-import { scalarMultBase } from "@stablelib/x25519";
-import { encode } from "@stablelib/base64";
-import { useAuth } from "./useAuth";
+import { invoke } from "@tauri-apps/api/core";
+import { useAuthStore } from "../stores/authStore";
+import { useVpnStore } from "../stores/vpnStore";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
@@ -23,42 +23,51 @@ export interface ServerInfo {
 }
 
 export function useVpnProfile() {
-  const { getAuthHeaders } = useAuth();
-
   const profiles = ref<VpnProfile[]>([]);
   const servers = ref<ServerInfo[]>([]);
   const isLoading = ref(false);
   const error = ref<string | null>(null);
 
-  // Generate WireGuard Key Pair (Base64 encoded)
-  function generateKeys() {
-    // Generate private key (32 bytes) using native crypto API
-    const privateKeyBytes = new Uint8Array(32);
-    crypto.getRandomValues(privateKeyBytes);
+  const authStore = useAuthStore();
+  const vpnStore = useVpnStore();
 
-    // Clamp private key (standard for X25519/Curve25519)
-    privateKeyBytes[0] &= 248;
-    privateKeyBytes[31] &= 127;
-    privateKeyBytes[31] |= 64;
-
-    // Generate public key from private key
-    const publicKeyBytes = scalarMultBase(privateKeyBytes);
-
+  const getHeaders = () => {
     return {
-      privateKey: encode(privateKeyBytes),
-      publicKey: encode(publicKeyBytes),
+      "Content-Type": "application/json",
+      ...authStore.getAuthHeaders(),
     };
-  }
+  };
+
+  /**
+   * Generates a new WireGuard keypair using Tauri Rust backend.
+   */
+  const generateKeys = async (): Promise<{
+    privateKey: string;
+    publicKey: string;
+  }> => {
+    try {
+      const keypair: { private_key: string; public_key: string } = await invoke(
+        "generate_wireguard_keypair",
+      );
+      return {
+        privateKey: keypair.private_key,
+        publicKey: keypair.public_key,
+      };
+    } catch (e: any) {
+      console.error("Failed to generate WireGuard keypair:", e);
+      throw new Error("Failed to generate WireGuard keypair.");
+    }
+  };
 
   async function fetchServers() {
     isLoading.value = true;
     error.value = null;
     try {
       const response = await fetch(`${API_URL}/api/servers`, {
-        headers: getAuthHeaders(),
+        headers: getHeaders(),
       });
       if (response.status === 401) {
-        useAuth().logout();
+        authStore.logout();
         throw new Error("Session expired. Please login again.");
       }
       if (!response.ok) throw new Error("Failed to fetch servers");
@@ -76,10 +85,10 @@ export function useVpnProfile() {
     error.value = null;
     try {
       const response = await fetch(`${API_URL}/api/vpn/profiles`, {
-        headers: getAuthHeaders(),
+        headers: getHeaders(),
       });
       if (response.status === 401) {
-        useAuth().logout();
+        authStore.logout();
         throw new Error("Session expired. Please login again.");
       }
       if (!response.ok) throw new Error("Failed to fetch profiles");
@@ -94,7 +103,7 @@ export function useVpnProfile() {
 
   async function registerProfile(
     deviceName: string,
-    _privateKey: string, // Not sent to server, caller should save this locally
+    privateKey: string, // Not sent to server, caller should save this locally
     publicKey: string,
   ) {
     isLoading.value = true;
@@ -102,10 +111,7 @@ export function useVpnProfile() {
     try {
       const response = await fetch(`${API_URL}/api/vpn/register`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAuthHeaders(),
-        },
+        headers: getHeaders(),
         body: JSON.stringify({
           publicKey,
           deviceName,
@@ -113,7 +119,7 @@ export function useVpnProfile() {
       });
 
       if (response.status === 401) {
-        useAuth().logout();
+        authStore.logout();
         throw new Error("Session expired. Please login again.");
       }
 
@@ -125,55 +131,69 @@ export function useVpnProfile() {
 
       const result = await response.json();
 
+      // Save the private key locally
+      vpnStore.saveConfig(result.id, privateKey, "", "");
+
       // Refresh profiles list
       await fetchProfiles();
 
       return result;
     } catch (e: any) {
-      console.error("Register Profile Error:", e);
-      error.value = e.message || "Unknown error";
+      console.error("Registration error:", e);
+      error.value = e.message || "Failed to register VPN profile";
       throw e;
     } finally {
       isLoading.value = false;
     }
   }
 
-  async function connectToServer(profileId: string, serverIp: string) {
+  /**
+   * Requests connection to a specific server for an existing profile.
+   */
+  const connectToServer = async (
+    profileId: string,
+    serverIp: string,
+    endpointPort?: number,
+  ) => {
     isLoading.value = true;
     error.value = null;
+
     try {
+      if (!authStore.isAuthenticated) {
+        throw new Error("User not authenticated");
+      }
+
+      console.log(
+        `[useVpnProfile] Connecting profile ${profileId} to server ${serverIp}`,
+      );
+
       const response = await fetch(`${API_URL}/api/vpn/connect`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAuthHeaders(),
-        },
+        headers: getHeaders(),
         body: JSON.stringify({
-          profileId,
-          serverIp,
+          profile_id: profileId,
+          server_ip: serverIp,
+          endpoint_port: endpointPort,
         }),
       });
 
-      if (response.status === 401) {
-        useAuth().logout();
-        throw new Error("Session expired. Please login again.");
-      }
-
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || "Connection failed");
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || "Failed to connect to server");
       }
 
-      const result = await response.json();
-      return result;
+      const connectionData = await response.json();
+      console.log("[useVpnProfile] Received connection data:", connectionData);
+
+      return connectionData;
     } catch (e: any) {
-      console.error("Connect to Server Error:", e);
-      error.value = e.message || "Unknown error";
+      console.error("Connection request error:", e);
+      error.value = e.message || "Failed to request server connection";
       throw e;
     } finally {
       isLoading.value = false;
     }
-  }
+  };
 
   return {
     profiles,

@@ -1,45 +1,57 @@
+```
 <script setup lang="ts">
 import { ref } from "vue";
-import { useAuth } from "@/composables/useAuth";
-import { Zap, Lock, User } from "lucide-vue-next";
+import { useAuthStore } from "../stores/authStore";
+import { Zap, User, Lock } from "lucide-vue-next";
 
-const { login } = useAuth();
+// ----------------------------------------------------
+// STATE
+// ----------------------------------------------------
+const authStore = useAuthStore();
 
-const username = ref("");
-const password = ref("");
-const error = ref("");
+// Error State
+const errorMessage = ref("");
+
+// Refs for Login
+const loginEmail = ref("");
+const loginPassword = ref("");
+
+// Define emits for App.vue communication
+const emit = defineEmits<{
+  (e: "login-success"): void;
+}>();
+
+// ----------------------------------------------------
+// METHODS
+// ----------------------------------------------------
 const loading = ref(false);
 
-async function handleSubmit() {
-  console.log("📝 [LoginForm] Form submitted");
-  console.log("📝 [LoginForm] Username:", username.value);
-  console.log("📝 [LoginForm] Password length:", password.value.length);
-
-  if (!username.value || !password.value) {
-    console.warn("⚠️ [LoginForm] Missing username or password");
-    error.value = "請輸入使用者名稱和密碼";
+const handleLogin = async () => {
+  errorMessage.value = "";
+  if (!loginEmail.value || !loginPassword.value) {
+    errorMessage.value = "請輸入使用者名稱和密碼";
     return;
   }
 
   loading.value = true;
-  error.value = "";
-  console.log("📝 [LoginForm] Calling login function...");
-
-  const success = await login(username.value, password.value);
-
-  console.log("📝 [LoginForm] Login result:", success);
-
-  if (!success) {
-    console.error("❌ [LoginForm] Login failed");
-    error.value = "使用者名稱或密碼錯誤";
-    // Clear password on failed login
-    password.value = "";
-  } else {
-    console.log("✅ [LoginForm] Login successful, should redirect to main app");
+  try {
+    const success = await authStore.login(
+      loginEmail.value,
+      loginPassword.value,
+    );
+    if (!success) {
+      errorMessage.value = "查無此帳號或密碼錯誤";
+      loginPassword.value = "";
+    } else {
+      emit("login-success"); // Notify parent to change view
+    }
+  } catch (error: any) {
+    console.error("Login error:", error);
+    errorMessage.value = error.message || "登入失敗，請稍後再試。";
+  } finally {
+    loading.value = false;
   }
-
-  loading.value = false;
-}
+};
 </script>
 
 <template>
@@ -60,7 +72,7 @@ async function handleSubmit() {
       </div>
 
       <!-- Form -->
-      <form @submit.prevent="handleSubmit" class="login-form">
+      <form @submit.prevent="handleLogin" class="login-form">
         <!-- Username field -->
         <div class="form-group">
           <label for="username" class="form-label">
@@ -69,7 +81,7 @@ async function handleSubmit() {
           </label>
           <input
             id="username"
-            v-model="username"
+            v-model="loginEmail"
             type="text"
             placeholder="輸入使用者名稱"
             required
@@ -87,7 +99,7 @@ async function handleSubmit() {
           </label>
           <input
             id="password"
-            v-model="password"
+            v-model="loginPassword"
             type="password"
             placeholder="輸入密碼"
             required
@@ -98,9 +110,9 @@ async function handleSubmit() {
         </div>
 
         <!-- Error message -->
-        <div v-if="error" class="error-msg">
+        <div v-if="errorMessage" class="error-msg">
           <div class="error-icon">!</div>
-          <span>{{ error }}</span>
+          <span>{{ errorMessage }}</span>
         </div>
 
         <!-- Submit button -->
