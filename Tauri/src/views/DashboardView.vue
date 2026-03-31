@@ -6,8 +6,14 @@ const processName = ref("ShooterGame.exe");
 const detectedGameId = ref("default");
 const knownRanges = ref(new Set<string>());
 
-function onNewRangeDetected() {
-  console.log("New game server range detected and added!");
+function onNewRangeDetected(ip: string) {
+  if (!ip || knownRanges.value.has(ip)) return;
+
+  const nextRanges = new Set(knownRanges.value);
+  nextRanges.add(ip);
+  knownRanges.value = nextRanges;
+
+  console.log(`[Dashboard] Added detected route: ${ip}`);
 }
 </script>
 

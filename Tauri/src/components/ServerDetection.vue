@@ -304,7 +304,9 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-const emit = defineEmits(["new-range-detected"]);
+const emit = defineEmits<{
+  (e: "new-range-detected", ip: string): void;
+}>();
 
 // State
 const isMonitoring = ref(false);
@@ -491,6 +493,7 @@ async function addToRoutes(ip: string) {
     await invoke<string>("add_detected_ip_to_routes", { ip });
     statusMessage.value = "已加入路由"; // Shortened
     statusType.value = "success";
+    emit("new-range-detected", ip);
   } catch (error) {
     statusMessage.value = `失敗: ${error}`;
     statusType.value = "error";

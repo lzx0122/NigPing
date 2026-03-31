@@ -74,9 +74,7 @@ async function handleRegister() {
       result.assigned_ip || "",
     );
 
-    const vpnConfig = vpnStore.getVpnConfig();
-
-    emit("profile-registered", vpnConfig);
+    emit("profile-registered");
   } catch (e: any) {
     console.error(e);
     error.value = e.message || "Registration failed";
