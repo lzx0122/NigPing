@@ -56,7 +56,7 @@ const handleLogin = async () => {
         <div class="logo-icon">
           <Zap class="h-8 w-8 fill-current" />
         </div>
-        <h1 class="logo-text">NigPing</h1>
+        <h1 class="logo-text">PingPal</h1>
         <p class="logo-subtitle">Game Accelerator</p>
       </div>
 

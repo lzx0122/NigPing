@@ -29,7 +29,7 @@ async function handleSubmit() {
   <div class="login-container">
     <div class="login-card">
       <div class="login-header">
-        <h1 class="title">NigPing Admin</h1>
+        <h1 class="title">PingPal Admin</h1>
         <p class="subtitle">Sign in to manage servers</p>
       </div>
 

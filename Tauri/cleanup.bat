@@ -1,6 +1,6 @@
 @echo off
 echo Stopping service...
-sc stop NigPingWGEngine
+sc stop PingPalWGEngine
 timeout /t 2 /nobreak
 echo Killing processes...
 taskkill /F /IM wg_service.exe

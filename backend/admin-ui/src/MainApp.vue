@@ -80,7 +80,7 @@ function handleLogout() {
     <header class="header">
       <div class="header-content">
         <div class="header-left">
-          <h1 class="title">NigPing Server Manager</h1>
+          <h1 class="title">PingPal Server Manager</h1>
           <p class="subtitle">Manage your server infrastructure</p>
         </div>
         <div class="flex gap-4">

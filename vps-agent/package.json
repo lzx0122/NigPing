@@ -1,7 +1,7 @@
 {
   "name": "vps-agent",
   "version": "1.0.0",
-  "description": "WireGuard Agent for NigPing",
+  "description": "WireGuard Agent for PingPal",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",

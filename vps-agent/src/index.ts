@@ -244,7 +244,7 @@ async function main() {
 
   // D. Hono Server (Health Check)
   app.get("/health", (c) => c.json({ status: "ok", ip: publicIp }));
-  app.get("/", (c) => c.text("NigPing VPS Agent Running."));
+  app.get("/", (c) => c.text("PingPal VPS Agent Running."));
 
   serve({ fetch: app.fetch, port: PORT });
   console.log(`Agent API running on port ${PORT}`);

@@ -1,9 +1,9 @@
 ---
-name: nigping-project
-description: NigPing monorepo layout, tech stack, and pnpm commands. Tauri desktop UI is Vue 3; shadcn-vue under Tauri/src/components/ui (incl. input/label); titlebar and some controls are native; ECharts for maps. Use for paths, commands, and UI stack context.
+name: pingpal-project
+description: PingPal monorepo layout, tech stack, and pnpm commands. Tauri desktop UI is Vue 3; shadcn-vue under Tauri/src/components/ui (incl. input/label); titlebar and some controls are native; ECharts for maps. Use for paths, commands, and UI stack context.
 ---
 
-# NigPing 專案脈絡
+# PingPal 專案脈絡
 
 此 repo **沒有根目錄 `package.json`**；各子專案獨立，於各自目錄使用 **pnpm**。
 

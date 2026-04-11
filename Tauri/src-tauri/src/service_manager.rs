@@ -1,8 +1,8 @@
 use std::process::Command;
 
-const SERVICE_NAME: &str = "NigPingWGEngine";
+const SERVICE_NAME: &str = "PingPalWGEngine";
 #[allow(dead_code)]
-const SERVICE_DISPLAY_NAME: &str = "NigPing WireGuard Engine";
+const SERVICE_DISPLAY_NAME: &str = "PingPal WireGuard Engine";
 
 fn sc_output_combined(stdout: &str, stderr: &str) -> String {
     format!("{} {}", stdout, stderr)
@@ -51,7 +51,7 @@ pub fn create_service(
         SERVICE_NAME,
         &format!("binPath={}", bin_path),
         "start=demand",
-        "DisplayName=NigPing WireGuard Engine",
+        "DisplayName=PingPal WireGuard Engine",
     ];
 
     tracing::debug!(?create_args, "sc.exe create");

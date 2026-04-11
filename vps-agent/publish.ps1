@@ -3,7 +3,7 @@ param (
     [string]$Username
 )
 
-$ImageName = "nigping-vps-agent"
+$ImageName = "pingpal-vps-agent"
 $Tag = "latest"
 $FullImage = "${Username}/${ImageName}:${Tag}"
 

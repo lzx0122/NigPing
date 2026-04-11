@@ -1,4 +1,4 @@
-# NigPing VPS Agent Deployment
+# PingPal VPS Agent Deployment
 
 ## Prerequisites
 
@@ -14,7 +14,7 @@ Copy the `deploy-vps.sh` script to your VPS and run it:
 
 ```bash
 # On your VPS:
-curl -O https://raw.githubusercontent.com/lzx0122/NigPing/main/vps-agent/deploy-vps.sh # (Example URL, adjust as needed)
+curl -O https://raw.githubusercontent.com/lzx0122/PingPal/main/vps-agent/deploy-vps.sh # (Example URL, adjust as needed)
 chmod +x deploy-vps.sh
 ./deploy-vps.sh
 ```
@@ -25,13 +25,13 @@ Or just copy-paste the content of `deploy-vps.sh`.
 
 If you prefer to set it up manually:
 
-1.  **Create a folder**: `mkdir ~/nigping-agent && cd ~/nigping-agent`
+1.  **Create a folder**: `mkdir ~/pingpal-agent && cd ~/pingpal-agent`
 2.  **Create `docker-compose.yml`**:
     ```yaml
     version: "3"
     services:
       vps-agent:
-        image: lzx0122/nigping-vps-agent:latest
+        image: lzx0122/pingpal-vps-agent:latest
         restart: always
         network_mode: "host"
         cap_add:

@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# NigPing VPS Agent Deployment Script
+# PingPal VPS Agent Deployment Script
 # Usage: ./deploy-vps.sh
 
 echo "========================================="
-echo "   NigPing VPS Agent Deployment"
+echo "   PingPal VPS Agent Deployment"
 echo "========================================="
 
 # 1. Check for Docker
@@ -16,7 +16,7 @@ if ! command -v docker &> /dev/null; then
 fi
 
 # 2. Setup Directory
-INSTALL_DIR=~/nigping-agent
+INSTALL_DIR=~/pingpal-agent
 mkdir -p $INSTALL_DIR
 cd $INSTALL_DIR
 
@@ -28,7 +28,7 @@ cat <<EOF > docker-compose.yml
 version: "3"
 services:
   vps-agent:
-    image: \${DOCKER_IMAGE_NAME:-lzx0122/nigping-vps-agent:latest}
+    image: \${DOCKER_IMAGE_NAME:-lzx0122/pingpal-vps-agent:latest}
     restart: always
     network_mode: "host"
     privileged: true
@@ -60,7 +60,7 @@ SUPABASE_URL=$SUPABASE_URL
 SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_KEY
 PUBLIC_IP=$PUBLIC_IP
 PORT=3000
-DOCKER_IMAGE_NAME=lzx0122/nigping-vps-agent:latest
+DOCKER_IMAGE_NAME=lzx0122/pingpal-vps-agent:latest
 EOF
     echo ".env file created."
 else

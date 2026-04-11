@@ -1,7 +1,7 @@
 {
-  "name": "nigping-backend",
+  "name": "pingpal-backend",
   "version": "1.0.0",
-  "description": "Backend server for NigPing",
+  "description": "Backend server for PingPal",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "dev:all": "concurrently \"pnpm run dev\" \"pnpm run admin:dev\" --names \"backend,admin\" --prefix-colors \"blue,magenta\"",

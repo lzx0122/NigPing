@@ -6,7 +6,7 @@ use tauri::{AppHandle, Runtime};
 use tauri_plugin_shell::ShellExt;
 
 // Tunnel interface name (fixed to avoid clashes with other VPN software)
-const INTERFACE_NAME: &str = "NigPingAdapter";
+const INTERFACE_NAME: &str = "PingPalAdapter";
 
 #[tauri::command]
 pub async fn connect_vpn<R: Runtime>(
@@ -35,7 +35,7 @@ pub async fn connect_vpn<R: Runtime>(
 
     // Step 1: write temp config (wg-tool only accepts a file path)
     let temp_dir = std::env::temp_dir();
-    let config_path = temp_dir.join("nigping.conf");
+    let config_path = temp_dir.join("pingpal.conf");
 
     // Filter out unsupported lines
     let filtered_config: String = config_content

@@ -9,7 +9,7 @@ if [ -z "$1" ]; then
 fi
 
 USERNAME=$1
-IMAGE_NAME="nigping-vps-agent"
+IMAGE_NAME="pingpal-vps-agent"
 TAG="latest"
 
 FULL_IMAGE="$USERNAME/$IMAGE_NAME:$TAG"

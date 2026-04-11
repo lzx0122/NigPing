@@ -2,7 +2,7 @@ version: "3"
 services:
   vps-agent:
     # Use image from Docker Hub if running on VPS
-    image: ${DOCKER_IMAGE_NAME:-nigping-vps-agent:latest}
+    image: ${DOCKER_IMAGE_NAME:-pingpal-vps-agent:latest}
     # Fallback to building locally if source is present (optional)
     build:
       context: .

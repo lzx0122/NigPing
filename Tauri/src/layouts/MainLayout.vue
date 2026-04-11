@@ -48,7 +48,7 @@ function goBackFromGame() {
             <h1
               class="text-lg font-bold text-white tracking-tight leading-none"
             >
-              NigPing
+              PingPal
             </h1>
             <span
               class="text-[10px] text-zinc-500 font-mono tracking-widest uppercase"

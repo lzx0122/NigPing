@@ -101,7 +101,7 @@ Found 1 active peers.
 
 檢查日誌：
 ```bash
-docker logs <nigping-agent-container-name>
+docker logs <pingpal-agent-container-name>
 ```
 
 期望看到：
@@ -179,7 +179,7 @@ AllowedIPs = 10.0.0.2/32
 1. 設備已連接到 VPS？
 2. VPS Agent 正在運行？
    ```bash
-   docker ps | grep nigping-agent
+   docker ps | grep pingpal-agent
    ```
 3. WireGuard 接口已啟動？
    ```bash
@@ -206,12 +206,12 @@ AllowedIPs = 10.0.0.2/32
 
 ### 查看 VPS Agent 日誌
 ```bash
-docker logs -f nigping-agent
+docker logs -f pingpal-agent
 ```
 
 ### 查看 WireGuard 對等設備
 ```bash
-docker exec nigping-agent wg show
+docker exec pingpal-agent wg show
 ```
 
 ### 檢查 Supabase 連接

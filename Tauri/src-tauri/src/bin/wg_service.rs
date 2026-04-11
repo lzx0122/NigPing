@@ -17,7 +17,7 @@ define_windows_service!(ffi_service_main, my_service_main);
 
 fn main() -> windows_service::Result<()> {
     // Run the service dispatcher
-    service_dispatcher::start("NigPingWGEngine", ffi_service_main)?;
+    service_dispatcher::start("PingPalWGEngine", ffi_service_main)?;
     Ok(())
 }
 
@@ -43,7 +43,7 @@ fn run_service(_arguments: Vec<OsString>) -> windows_service::Result<()> {
     };
 
     // Register the service control handler
-    let status_handle = service_control_handler::register("NigPingWGEngine", event_handler)?;
+    let status_handle = service_control_handler::register("PingPalWGEngine", event_handler)?;
 
     // Report Running state
     // We accept Stop commands
@@ -81,7 +81,7 @@ fn run_service(_arguments: Vec<OsString>) -> windows_service::Result<()> {
     let adapter_name = if args.len() > 2 {
         args[2].clone()
     } else {
-        "NigPingWGEngine".to_string()
+        "PingPalWGEngine".to_string()
     };
 
     // Spawn the actual wg-engine process
@@ -89,7 +89,7 @@ fn run_service(_arguments: Vec<OsString>) -> windows_service::Result<()> {
     let mut child: Option<Child> = None;
 
     // Log file path (SYSTEM can write to Windows/Temp)
-    let log_path = std::env::temp_dir().join("nigping_service.log");
+    let log_path = std::env::temp_dir().join("pingpal_service.log");
 
     // Helper to log
     let log = |msg: &str| {
@@ -99,7 +99,7 @@ fn run_service(_arguments: Vec<OsString>) -> windows_service::Result<()> {
             .append(true)
             .open(&log_path)
         {
-            let _ = writeln!(f, "[NigPingService] {}", msg);
+            let _ = writeln!(f, "[PingPalService] {}", msg);
         }
     };
 

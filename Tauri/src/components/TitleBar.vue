@@ -20,7 +20,7 @@ const close = () => appWindow.close();
         <span class="text-[10px] font-black text-black leading-none">N</span>
       </div>
       <span class="text-xs font-bold text-zinc-400 tracking-wider uppercase"
-        >NigPing</span
+        >PingPal</span
       >
     </div>
 
