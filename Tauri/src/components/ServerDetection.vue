@@ -2,7 +2,6 @@
   <div
     class="flex flex-col w-full rounded-lg border border-zinc-800 bg-zinc-950/50 backdrop-blur-sm overflow-hidden shadow-sm"
   >
-    <!-- Header with Monitoring Toggle (Compact) -->
     <div
       class="flex items-center justify-between p-5 border-b border-zinc-800 bg-zinc-900/20"
     >
@@ -401,7 +400,6 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// Methods
 async function toggleMonitoring() {
   if (isMonitoring.value) {
     await stopMonitoring();
@@ -504,6 +502,12 @@ async function addToRoutes(ip: string) {
 onUnmounted(() => {
   if (pollInterval !== null) {
     clearInterval(pollInterval);
+    pollInterval = null;
+  }
+  if (isMonitoring.value) {
+    void tauriStopMonitoring().catch((err) => {
+      console.warn("[ServerDetection] stopMonitoring on unmount failed:", err);
+    });
   }
 });
 </script>

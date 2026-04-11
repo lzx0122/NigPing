@@ -274,6 +274,99 @@ pub async fn connect_vpn<R: Runtime>(
     Ok("VPN connected successfully.".to_string())
 }
 
+fn wg_dump_first_peer(dump: &str) -> Option<(String, String)> {
+    for line in dump.lines() {
+        let cols: Vec<&str> = line.split('\t').collect();
+        if cols.len() >= 8 {
+            return Some((cols[0].to_string(), cols[3].to_string()));
+        }
+    }
+    None
+}
+
+fn wg_allowed_covers_all_ipv4(allowed: &str) -> bool {
+    allowed.split(',').any(|s| {
+        matches!(s.trim(), "0.0.0.0/0" | "0.0.0.0/1" | "128.0.0.0/1")
+    })
+}
+
+fn wg_merge_host32(existing: &str, host: &str) -> String {
+    let entry = format!("{}/32", host);
+    let trimmed = existing.trim();
+    if trimmed.is_empty() || trimmed == "(none)" {
+        return entry;
+    }
+    let mut parts: Vec<String> = trimmed
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if !parts.iter().any(|p| p == &entry) {
+        parts.push(entry);
+    }
+    parts.join(", ")
+}
+
+/// Ensures WireGuard will encapsulate traffic to `ip`, then adds a Windows /32 route via the tunnel.
+pub async fn append_allowed_ip_and_route<R: Runtime>(
+    app: &AppHandle<R>,
+    ip: &str,
+) -> Result<String, String> {
+    let dump_out = app
+        .shell()
+        .sidecar("wg-tool")
+        .map_err(|e| e.to_string())?
+        .args(["show", INTERFACE_NAME, "dump"])
+        .output()
+        .await
+        .map_err(|e| format!("wg-tool show dump failed: {}", e))?;
+
+    if !dump_out.status.success() {
+        let stderr = String::from_utf8_lossy(&dump_out.stderr);
+        return Err(format!(
+            "wg-tool show dump failed (is the tunnel up?): {}",
+            stderr
+        ));
+    }
+
+    let dump = String::from_utf8_lossy(&dump_out.stdout);
+    let (pubkey, allowed) = wg_dump_first_peer(&dump).ok_or_else(|| {
+        "WireGuard dump had no peer row; is the tunnel up and configured?"
+            .to_string()
+    })?;
+    if pubkey.is_empty() {
+        return Err("WireGuard peer public key missing in dump.".to_string());
+    }
+    if !wg_allowed_covers_all_ipv4(&allowed) {
+        let merged = wg_merge_host32(&allowed, ip);
+        if merged != allowed.trim() {
+            let set_out = app
+                .shell()
+                .sidecar("wg-tool")
+                .map_err(|e| e.to_string())?
+                .args([
+                    "set",
+                    INTERFACE_NAME,
+                    "peer",
+                    &pubkey,
+                    "allowed-ips",
+                    &merged,
+                ])
+                .output()
+                .await
+                .map_err(|e| format!("wg-tool set allowed-ips failed: {}", e))?;
+
+            if !set_out.status.success() {
+                let stderr = String::from_utf8_lossy(&set_out.stderr);
+                return Err(format!("wg-tool set allowed-ips: {}", stderr));
+            }
+            tracing::info!(target = %ip, "merged host into WireGuard AllowedIPs");
+        }
+    }
+
+    add_route_to_vpn(ip)
+}
+
 /// Add a /32 route for a single IP through the VPN adapter (used by network monitor).
 pub fn add_route_to_vpn(ip: &str) -> Result<String, String> {
     let if_index_output = Command::new("netsh")

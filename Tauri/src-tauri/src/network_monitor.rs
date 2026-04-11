@@ -711,18 +711,25 @@ pub async fn stop_monitoring(
 
 /// Add a detected server IP to VPN routing table.
 ///
+/// Updates WireGuard `AllowedIPs` for the first peer when needed, then adds a Windows /32 route.
+///
 /// # Errors
 ///
 /// Returns an error if:
 /// - IP address is invalid or private
-/// - Failed to add route (see `vpn::add_route_to_vpn` for details)
+/// - `wg-tool` or `route add` fails (see `vpn::append_allowed_ip_and_route`)
 #[tauri::command]
-pub fn add_detected_ip_to_routes(ip: String) -> Result<String, String> {
+pub async fn add_detected_ip_to_routes(
+    app: tauri::AppHandle,
+    ip: String,
+) -> Result<String, String> {
     if !is_public_ip(&ip) {
         return Err(to_cmd_err(AppError::Msg(format!(
             "invalid or private IP address: {}",
             ip
         ))));
     }
-    crate::vpn::add_route_to_vpn(&ip).map_err(|e| to_cmd_err(AppError::Msg(e)))
+    crate::vpn::append_allowed_ip_and_route(&app, &ip)
+        .await
+        .map_err(|e| to_cmd_err(AppError::Msg(e)))
 }
