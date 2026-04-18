@@ -8,7 +8,6 @@ fn sc_output_combined(stdout: &str, stderr: &str) -> String {
     format!("{} {}", stdout, stderr)
 }
 
-/// True if sc output indicates the service is already running (locale-agnostic hints).
 fn sc_says_already_running(stdout: &str, stderr: &str) -> bool {
     let c = sc_output_combined(stdout, stderr).to_lowercase();
     c.contains("1056")
@@ -16,19 +15,16 @@ fn sc_says_already_running(stdout: &str, stderr: &str) -> bool {
         || c.contains("already been started")
 }
 
-/// True if stop was a no-op because the service is not running.
 fn sc_says_not_running(stdout: &str, stderr: &str) -> bool {
     let c = sc_output_combined(stdout, stderr).to_lowercase();
     c.contains("1062") || c.contains("has not been started") || c.contains("not been started")
 }
 
-/// True if delete/query indicates the service does not exist.
 fn sc_says_service_missing(stdout: &str, stderr: &str) -> bool {
     let c = sc_output_combined(stdout, stderr).to_lowercase();
     c.contains("1060") || c.contains("does not exist as an installed service")
 }
 
-/// Create a Windows service for WireGuard engine
 pub fn create_service(
     wrapper_path: &str,
     engine_path: &str,
@@ -77,7 +73,6 @@ pub fn create_service(
     Ok(())
 }
 
-/// Start the Windows service
 pub fn start_service() -> Result<(), String> {
     tracing::debug!("starting Windows service");
 
@@ -107,7 +102,6 @@ pub fn start_service() -> Result<(), String> {
     Ok(())
 }
 
-/// Stop the Windows service
 pub fn stop_service() -> Result<(), String> {
     tracing::debug!("stopping Windows service");
 
@@ -132,7 +126,6 @@ pub fn stop_service() -> Result<(), String> {
     Ok(())
 }
 
-/// Delete the Windows service
 #[allow(dead_code)]
 pub fn delete_service() -> Result<(), String> {
     tracing::debug!("deleting Windows service");
@@ -162,7 +155,6 @@ pub fn delete_service() -> Result<(), String> {
     Ok(())
 }
 
-/// Check if service exists
 pub fn service_exists() -> Result<bool, String> {
     let output = Command::new("sc.exe")
         .args(["query", SERVICE_NAME])
@@ -172,7 +164,6 @@ pub fn service_exists() -> Result<bool, String> {
     Ok(output.status.success())
 }
 
-/// Wait for service to be running
 pub fn wait_for_service_running(timeout_secs: u64) -> Result<(), String> {
     let start = std::time::Instant::now();
 
@@ -197,4 +188,35 @@ pub fn wait_for_service_running(timeout_secs: u64) -> Result<(), String> {
         "timed out after {}s waiting for service to start",
         timeout_secs
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sc_output_combined() {
+        assert_eq!(sc_output_combined("out", "err"), "out err");
+    }
+
+    #[test]
+    fn test_sc_says_already_running() {
+        assert!(sc_says_already_running("Error 1056", ""));
+        assert!(sc_says_already_running("", "already run"));
+        assert!(!sc_says_already_running("success", ""));
+    }
+
+    #[test]
+    fn test_sc_says_not_running() {
+        assert!(sc_says_not_running("Error 1062", ""));
+        assert!(sc_says_not_running("", "has not been started"));
+        assert!(!sc_says_not_running("running", ""));
+    }
+
+    #[test]
+    fn test_sc_says_service_missing() {
+        assert!(sc_says_service_missing("Error 1060", ""));
+        assert!(sc_says_service_missing("", "does not exist as an installed service"));
+        assert!(!sc_says_service_missing("ok", ""));
+    }
 }

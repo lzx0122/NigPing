@@ -33,3 +33,4 @@ docs/
 .github/
 
 Tauri/coverage/
+tarpaulin-report.html
