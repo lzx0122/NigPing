@@ -7,14 +7,27 @@ $ImageName = "pingpal-vps-agent"
 $Tag = "latest"
 $FullImage = "${Username}/${ImageName}:${Tag}"
 
-$Client = "docker"
-if (Get-Command "podman" -ErrorAction SilentlyContinue) {
-    $Client = "podman"
-    Write-Host "Using Podman..."
-} elseif (Get-Command "docker" -ErrorAction SilentlyContinue) {
+$Client = $null
+$PodmanCmd = Get-Command "podman" -ErrorAction SilentlyContinue
+$DockerCmd = Get-Command "docker" -ErrorAction SilentlyContinue
+
+if ($PodmanCmd) {
+    podman info *> $null
+    if ($LASTEXITCODE -eq 0) {
+        $Client = "podman"
+        Write-Host "Using Podman..."
+    } else {
+        Write-Warning "Podman detected but unavailable. Falling back to Docker."
+    }
+}
+
+if (-not $Client -and $DockerCmd) {
+    $Client = "docker"
     Write-Host "Using Docker..."
-} else {
-    Write-Error "Neither Podman nor Docker found."
+}
+
+if (-not $Client) {
+    Write-Error "Neither a working Podman nor Docker was found."
     exit 1
 }
 

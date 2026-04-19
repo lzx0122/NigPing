@@ -9,19 +9,22 @@ const status = ref("Ready");
 const isConnected = ref(false);
 const isLoading = ref(false);
 const currentPing = ref(0);
-const gameIpRanges = ref(new Set<string>());
+const gameIpRanges = ref<string[]>([]);
+const currentGameId = ref<string | null>(null);
+const UDP_DYNAMIC_ONLY_GAMES = new Set<string>();
+const FULL_TUNNEL_TEST_GAMES = new Set<string>();
 
 export function useWireGuardSession() {
   const vpnStore = useVpnStore();
   const { connectToServer } = useVpnProfile();
 
   async function fetchGameRanges(gameId: string) {
+    currentGameId.value = gameId;
     try {
       const response = await apiFetch(`/api/games/${gameId}/ranges`);
       if (!response.ok) throw new Error(`HTTP error ${response.status}`);
       const ranges = (await response.json()) as string[];
-      gameIpRanges.value.clear();
-      ranges.forEach((range) => gameIpRanges.value.add(range));
+      gameIpRanges.value = [...new Set(ranges)];
     } catch (error) {
       console.error(`Failed to fetch IP ranges for ${gameId}:`, error);
     }
@@ -37,15 +40,22 @@ export function useWireGuardSession() {
       throw new Error("No VPN configuration found. Please register first.");
     }
 
-    const allowedIps = Array.from(gameIpRanges.value).join(", ");
-    const routeIps = allowedIps || "10.0.0.0/24";
+    const gameId = currentGameId.value ?? "";
+    const useFullTunnelTest = FULL_TUNNEL_TEST_GAMES.has(gameId);
+    const useUdpDynamicOnly = UDP_DYNAMIC_ONLY_GAMES.has(gameId);
+    const effectiveRanges = [...new Set(gameIpRanges.value)];
+    const routeIps = useFullTunnelTest
+      ? "0.0.0.0/0"
+      : useUdpDynamicOnly
+        ? "10.0.0.0/24"
+        : effectiveRanges.join(", ") || "10.0.0.0/24";
+    const dnsLine = useFullTunnelTest ? "DNS = 1.1.1.1\n" : "";
 
     return `
 [Interface]
 PrivateKey = ${cfg.privateKey}
 Address = ${serverConfig.assigned_ip}
-DNS = 1.1.1.1
-MTU = 1280
+${dnsLine}MTU = 1280
 
 [Peer]
 PublicKey = ${serverConfig.server_public_key}

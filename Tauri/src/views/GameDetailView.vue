@@ -45,6 +45,15 @@ const trafficMonitor = useGameTrafficMonitor({
 const isBusy = computed(
   () => isLoading.value || trafficMonitor.isLoading.value,
 );
+const primaryServerData = computed(() => {
+  const servers = trafficMonitor.detectedServers.value;
+  if (servers.length === 0) return null;
+  return servers.reduce((prev, curr) => {
+    const currRate = curr.send_rate + curr.recv_rate;
+    const prevRate = prev.send_rate + prev.recv_rate;
+    return currRate > prevRate ? curr : prev;
+  });
+});
 const trafficStatusText = computed(() => {
   if (trafficMonitor.activityMessage.value) {
     return trafficMonitor.activityMessage.value;
@@ -80,8 +89,22 @@ watch(
 
 async function onConnect() {
   if (!selectedServer.value) return;
-  await connect(selectedServer.value);
-  await trafficMonitor.startMonitoring();
+
+  try {
+    if (game.value?.id) {
+      try {
+        await fetchGameRanges(game.value.id);
+      } catch (error) {
+        console.warn("Failed to fetch game ranges, continuing with empty ranges:", error);
+      }
+    }
+
+    await connect(selectedServer.value);
+
+    await trafficMonitor.startMonitoring();
+  } catch (error) {
+    console.error("Failed to connect:", error);
+  }
 }
 
 async function onDisconnect() {
@@ -91,9 +114,9 @@ async function onDisconnect() {
 
 function onNewRangeDetected(ip: string) {
   if (!ip) return;
-  const newSet = new Set(gameIpRanges.value);
-  newSet.add(ip);
-  gameIpRanges.value = newSet;
+  if (!gameIpRanges.value.includes(ip)) {
+    gameIpRanges.value = [...gameIpRanges.value, ip];
+  }
 }
 </script>
 
@@ -111,6 +134,7 @@ function onNewRangeDetected(ip: string) {
       :traffic-status-type="trafficMonitor.activityType.value"
       :vpn-config="vpnConfigForUi"
       :game-ip-ranges="gameIpRanges"
+      :primary-server-data="primaryServerData"
       @connect="onConnect"
       @disconnect="onDisconnect"
       @new-range-detected="onNewRangeDetected"

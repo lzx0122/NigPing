@@ -2,6 +2,7 @@ import { onUnmounted, ref } from "vue";
 import { apiFetch } from "@/lib/apiClient";
 import { useTrafficMonitorStore } from "@/stores/trafficMonitorStore";
 import {
+  addDetectedIpToRoutes,
   getAllSessionIps,
   getDetectedServers,
   startMonitoring as tauriStartMonitoring,
@@ -15,7 +16,7 @@ type MonitorActivityType = "info" | "success";
 type UseGameTrafficMonitorOptions = {
   getProcessName: () => string;
   getGameId?: () => string | undefined;
-  getKnownRanges?: () => Set<string> | undefined;
+  getKnownRanges?: () => string[] | undefined;
   onNewRangeDetected?: (ip: string) => void;
   pollIntervalMs?: number;
 };
@@ -118,7 +119,7 @@ export function useGameTrafficMonitor(options: UseGameTrafficMonitorOptions) {
   }
 
   function initializeAutoCaches() {
-    const knownRanges = options.getKnownRanges?.() ?? new Set<string>();
+    const knownRanges = options.getKnownRanges?.() ?? [];
     autoRoutedRanges.value = new Set<string>();
     autoPostedRanges.value = new Set<string>();
     autoPostingRanges.value.clear();
@@ -322,6 +323,9 @@ export function useGameTrafficMonitor(options: UseGameTrafficMonitorOptions) {
     }
 
     try {
+      await addDetectedIpToRoutes(ip).catch((error) => {
+        console.warn(`[TrafficMonitor] Manual live route add failed for ${ip}:`, error);
+      });
       const response = await apiFetch(`/api/vpn/games/${gameId}/ranges/learn`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

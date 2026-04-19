@@ -62,6 +62,13 @@ interface LocationData {
   countryName: string;
 }
 
+type ActivePeer = {
+  user_id: string;
+  device_name: string;
+  public_key: string;
+  allowed_ip: string;
+};
+
 async function getLocationFromIp(ip: string): Promise<LocationData> {
   if (process.env.LOCATION_LAT && process.env.LOCATION_LON && process.env.COUNTRY_CODE) {
     console.log("Using manually configured location from environment variables");
@@ -85,8 +92,8 @@ PrivateKey = ${privateKey}
 ListenPort = 51820
 SaveConfig = false
 Address = 10.0.0.1/24
-PostUp = iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
+PostUp = iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -j MASQUERADE
+PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -s 10.0.0.0/24 -j MASQUERADE
 
 `;
 
@@ -112,6 +119,41 @@ AllowedIPs = ${p.allowed_ip}/32
     } catch {}
     runCommand(`wg-quick up ${WG_INTERFACE}`);
   }
+}
+
+function normalizeAllowedIp(assignedIp: string): string {
+  const raw = (assignedIp || "").trim();
+  if (!raw) return "";
+  return raw.includes("/") ? raw.split("/")[0] : raw;
+}
+
+async function fetchActivePeersForServer(publicIp: string): Promise<ActivePeer[]> {
+  const { data, error } = await supabase
+    .from("vpn_server_allocations")
+    .select(
+      "assigned_ip, vpn_profiles!inner(user_id, device_name, public_key, is_active)",
+    )
+    .eq("server_ip", publicIp)
+    .eq("vpn_profiles.is_active", true);
+
+  if (error) {
+    throw error;
+  }
+
+  const rows = (data || []) as any[];
+  return rows
+    .map((row) => {
+      const profile = row.vpn_profiles;
+      const allowedIp = normalizeAllowedIp(String(row.assigned_ip || ""));
+      if (!profile?.public_key || !allowedIp) return null;
+      return {
+        user_id: String(profile.user_id || "unknown"),
+        device_name: String(profile.device_name || "unknown-device"),
+        public_key: String(profile.public_key),
+        allowed_ip: allowedIp,
+      } as ActivePeer;
+    })
+    .filter((p): p is ActivePeer => p !== null);
 }
 
 async function main() {
@@ -174,46 +216,31 @@ async function main() {
   }
 
   try {
-    const { data: peers, error } = await supabase
-      .from("vpn_profiles")
-      .select("*")
-      .eq("server_ip", publicIp)
-      .eq("is_active", true);
-
-    if (error) console.error("Error fetching peers:", error);
-    if (peers) {
-      console.log(`Found ${peers.length} active peers.`);
-      updateWireGuardConfig(peers, privateKey);
-    }
+    const peers = await fetchActivePeersForServer(publicIp);
+    console.log(`Found ${peers.length} active peers.`);
+    updateWireGuardConfig(peers, privateKey);
   } catch (e) {
     console.error("Initial sync failed:", e);
   }
 
   console.log("Subscribing to Realtime changes...");
   supabase
-    .channel("vpn_profiles_changes")
+    .channel("vpn_allocations_changes")
     .on(
       "postgres_changes",
       {
         event: "*",
         schema: "public",
-        table: "vpn_profiles",
+        table: "vpn_server_allocations",
         filter: `server_ip=eq.${publicIp}`,
       },
       async (payload) => {
         console.log("Change detected!", payload.eventType);
-        const { data: currentPeers } = await supabase
-          .from("vpn_profiles")
-          .select("*")
-          .eq("server_ip", publicIp)
-          .eq("is_active", true);
-
-        if (currentPeers) {
-          try {
-            updateWireGuardConfig(currentPeers, privateKey);
-          } catch (configError) {
-            console.error("Failed to update WG config on change:", configError);
-          }
+        try {
+          const currentPeers = await fetchActivePeersForServer(publicIp);
+          updateWireGuardConfig(currentPeers, privateKey);
+        } catch (configError) {
+          console.error("Failed to update WG config on change:", configError);
         }
       },
     )

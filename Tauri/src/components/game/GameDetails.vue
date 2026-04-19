@@ -20,7 +20,7 @@ const props = defineProps<{
   trafficStatusText?: string;
   trafficStatusType?: "info" | "success";
   vpnConfig: any;
-  gameIpRanges: Set<string>;
+  gameIpRanges: string[];
   primaryServerData?: DetectedServerPayload | null;
 }>();
 
@@ -52,7 +52,7 @@ const {
   error: clientGeoError,
 } = useClientGeo();
 
-const gameIpRangesList = computed(() => Array.from(props.gameIpRanges));
+const gameIpRangesList = computed(() => props.gameIpRanges);
 
 const MAX_HISTORY = 60;
 const history = ref<{ send: number; recv: number }[]>([]);
@@ -249,7 +249,7 @@ function formatBytes(bytes: number) {
                 class="px-2 py-0.5 bg-zinc-900 text-zinc-400 text-[10px] rounded font-mono border border-zinc-800 uppercase"
                 :title="gameIpRangesList.join(', ')"
               >
-                {{ gameIpRanges.size }} routed ranges
+                {{ gameIpRanges.length }} routed ranges
               </span>
               <div
                 v-if="isTrafficMonitoring"
@@ -258,7 +258,7 @@ function formatBytes(bytes: number) {
               />
             </div>
             <div
-              v-if="gameIpRanges.size > 0"
+              v-if="gameIpRanges.length > 0"
               class="flex flex-wrap gap-1 max-h-16 overflow-y-auto"
             >
               <span

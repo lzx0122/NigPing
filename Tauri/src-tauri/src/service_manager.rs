@@ -31,8 +31,27 @@ pub fn create_service(
     adapter_name: &str,
 ) -> Result<(), String> {
     if service_exists()? {
-        tracing::debug!("service already exists; skip create");
-        return Ok(());
+        tracing::debug!("service already exists; attempting to clean up and recreate");
+        
+        let _ = stop_service();
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        
+        let delete_output = Command::new("sc.exe")
+            .args(["delete", SERVICE_NAME])
+            .output()
+            .map_err(|e| format!("sc.exe delete failed: {}", e))?;
+
+        if !delete_output.status.success() {
+            let stderr = String::from_utf8_lossy(&delete_output.stderr);
+            let stdout = String::from_utf8_lossy(&delete_output.stdout);
+            
+            if !sc_says_service_missing(&stdout, &stderr) {
+                tracing::warn!("could not delete existing service, will reuse: {} {}", stdout, stderr);
+                return Ok(());
+            }
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(500));
     }
 
     tracing::debug!("creating Windows service");
@@ -132,7 +151,26 @@ pub fn delete_service() -> Result<(), String> {
 
     let _ = stop_service();
 
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    std::thread::sleep(std::time::Duration::from_millis(1500));
+
+    for attempt in 0..5 {
+        let output = Command::new("sc.exe")
+            .args(["query", SERVICE_NAME])
+            .output()
+            .map_err(|e| format!("sc query failed: {}", e))?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        if stdout.contains("STOPPED") || !output.status.success() {
+            tracing::debug!(attempt, "service confirmed stopped");
+            break;
+        }
+
+        if attempt < 4 {
+            tracing::debug!(attempt, "waiting for service to stop...");
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+    }
 
     let output = Command::new("sc.exe")
         .args(["delete", SERVICE_NAME])
