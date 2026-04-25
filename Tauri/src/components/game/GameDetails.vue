@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { computed, watch, ref } from "vue";
+import { computed, ref } from "vue";
 import { Activity, Zap } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,6 +16,7 @@ import GameServerList from "./GameServerList.vue";
 import type { Game, Server } from "@/data/games";
 import type { DetectedServerPayload } from "@/lib/tauriCommands";
 import { useClientGeo } from "@/composables/useClientGeo";
+import { useGameTelemetryChart } from "@/composables/useGameTelemetryChart";
 
 type RoutingMode = "full-tunnel" | "split-tunnel";
 
@@ -65,64 +66,19 @@ const {
 const gameIpRangesList = computed(() => props.gameIpRanges);
 const showRoutingDialog = ref(false);
 
-const MAX_HISTORY = 60;
-const history = ref<{ send: number; recv: number }[]>([]);
-
-watch(
-  () => props.primaryServerData,
-  (newVal) => {
-    if (newVal) {
-      history.value.push({
-        send: newVal.send_rate,
-        recv: newVal.recv_rate,
-      });
-      if (history.value.length > MAX_HISTORY) {
-        history.value.shift();
-      }
-    }
-  },
-  { deep: true },
-);
-
-watch(
-  () => props.isTrafficMonitoring,
-  (on) => {
-    if (!on) {
-      history.value = [];
-    }
-  },
-);
-
-const maxChartValue = computed(() => {
-  if (history.value.length < 2) return 1024;
-  return Math.max(
-    ...history.value.map((d) => Math.max(d.send, d.recv)),
-    1024,
-  );
+const {
+  history,
+  pingDisplayText,
+  sendPathLine,
+  sendPathArea,
+  recvPathLine,
+  recvPathArea,
+  pingPathLine,
+} = useGameTelemetryChart({
+  getGameId: () => props.game.id,
+  getPrimary: () => props.primaryServerData,
+  getIsTrafficMonitoring: () => props.isTrafficMonitoring,
 });
-
-function createPath(key: "send" | "recv", isArea: boolean) {
-  if (history.value.length < 2) return "";
-  const width = 100;
-  const height = 100;
-  const maxVal = maxChartValue.value;
-  const points = history.value.map((d, i) => {
-    const x = (i / (history.value.length - 1)) * width;
-    const y = height - (d[key] / maxVal) * height;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  });
-  if (isArea) {
-    const firstX = points[0].split(",")[0];
-    const lastX = points[points.length - 1].split(",")[0];
-    return `M ${firstX},${height} L ${points.join(" L ")} L ${lastX},${height} Z`;
-  }
-  return `M ${points.join(" L ")}`;
-}
-
-const sendPathLine = computed(() => createPath("send", false));
-const sendPathArea = computed(() => createPath("send", true));
-const recvPathLine = computed(() => createPath("recv", false));
-const recvPathArea = computed(() => createPath("recv", true));
 
 function formatBytes(bytes: number) {
   if (!bytes) return "0 B";
@@ -220,13 +176,25 @@ function selectRoutingMode(mode: RoutingMode) {
               vector-effect="non-scaling-stroke"
               opacity="0.55"
             />
-            <path :d="recvPathArea" fill="url(#gameDetailsGradRecv)" />
+            <path :d="recvPathArea" fill="url(#gameDetailsGradRecv)" opacity="0.55" />
             <path
               :d="recvPathLine"
               fill="none"
               stroke="#06b6d4"
               stroke-width="1.5"
               vector-effect="non-scaling-stroke"
+            />
+            <path
+              v-if="pingPathLine"
+              :d="pingPathLine"
+              fill="none"
+              stroke="#34d399"
+              stroke-width="1.2"
+              stroke-dasharray="2.5 2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              vector-effect="non-scaling-stroke"
+              opacity="0.9"
             />
           </svg>
         </div>
@@ -318,7 +286,6 @@ function selectRoutingMode(mode: RoutingMode) {
                 }}
               </p>
             </div>
-
             <div class="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 mt-auto">
               <div v-if="primaryServerData" class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2 mb-1">
@@ -366,27 +333,42 @@ function selectRoutingMode(mode: RoutingMode) {
                   <span
                     class="text-[10px] text-zinc-500 uppercase font-bold mb-0.5 tracking-widest flex items-center justify-end gap-1.5"
                   >
-                    <span class="w-1.5 h-1.5 rounded-full bg-purple-500" />
-                    Up
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    Ping
                   </span>
                   <span
-                    class="text-sm font-mono text-purple-200 font-semibold tabular-nums"
-                    >{{ formatBytes(primaryServerData.send_rate) }}/s</span
+                    class="text-sm font-mono text-emerald-200 font-semibold tabular-nums"
                   >
+                    {{ pingDisplayText }}
+                  </span>
                 </div>
-                <div class="flex flex-col">
-                  <span
-                    class="text-[10px] text-zinc-500 uppercase font-bold mb-0.5 tracking-widest flex items-center justify-end gap-1.5"
-                  >
+                <div class="flex gap-6 text-right sm:shrink-0">
+                  <div class="flex flex-col">
                     <span
-                      class="w-1.5 h-1.5 rounded-full bg-cyan-500 shadow-[0_0_5px_cyan]"
-                    />
-                    Down
-                  </span>
-                  <span
-                    class="text-sm font-mono text-cyan-200 font-semibold tabular-nums"
-                    >{{ formatBytes(primaryServerData.recv_rate) }}/s</span
-                  >
+                      class="text-[10px] text-zinc-500 uppercase font-bold mb-0.5 tracking-widest flex items-center justify-end gap-1.5"
+                    >
+                      <span class="w-1.5 h-1.5 rounded-full bg-purple-500" />
+                      Up
+                    </span>
+                    <span
+                      class="text-sm font-mono text-purple-200 font-semibold tabular-nums"
+                      >{{ formatBytes(primaryServerData.send_rate) }}/s</span
+                    >
+                  </div>
+                  <div class="flex flex-col">
+                    <span
+                      class="text-[10px] text-zinc-500 uppercase font-bold mb-0.5 tracking-widest flex items-center justify-end gap-1.5"
+                    >
+                      <span
+                        class="w-1.5 h-1.5 rounded-full bg-cyan-500 shadow-[0_0_5px_cyan]"
+                      />
+                      Down
+                    </span>
+                    <span
+                      class="text-sm font-mono text-cyan-200 font-semibold tabular-nums"
+                      >{{ formatBytes(primaryServerData.recv_rate) }}/s</span
+                    >
+                  </div>
                 </div>
               </div>
             </div>

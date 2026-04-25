@@ -22,6 +22,9 @@ type UseGameTrafficMonitorOptions = {
 };
 
 const startMonitorTimeoutMs = 15000;
+
+const TAURI_ERR_ALREADY_MONITORING = "already monitoring";
+const TAURI_ERR_NO_ACTIVE_MONITORING = "no active monitoring";
 const ipv4Regex =
   /^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)$/;
 
@@ -80,12 +83,12 @@ export function useGameTrafficMonitor(options: UseGameTrafficMonitorOptions) {
 
   function isAlreadyMonitoringError(error: unknown): boolean {
     const message = parseErrorMessage(error).toLowerCase();
-    return message.includes("already monitoring");
+    return message.includes(TAURI_ERR_ALREADY_MONITORING);
   }
 
   function isNoActiveMonitoringError(error: unknown): boolean {
     const message = parseErrorMessage(error).toLowerCase();
-    return message.includes("no active monitoring");
+    return message.includes(TAURI_ERR_NO_ACTIVE_MONITORING);
   }
 
   function clearPollingTimer() {
@@ -218,6 +221,8 @@ export function useGameTrafficMonitor(options: UseGameTrafficMonitorOptions) {
   }
 
   async function startMonitoring() {
+    if (isMonitoring.value) return;
+
     if (trafficMonitorStore.startInFlight) {
       statusMessage.value = "Monitoring switch in progress...";
       statusType.value = "info";
@@ -260,6 +265,7 @@ export function useGameTrafficMonitor(options: UseGameTrafficMonitorOptions) {
       }
 
       trafficMonitorStore.claimOwner(localOwnerId);
+      trafficMonitorStore.markMonitoringStarted(processName);
       await beginLocalMonitoringSession();
     } catch (error) {
       statusMessage.value = `Failed: ${parseErrorMessage(error)}`;
@@ -284,6 +290,7 @@ export function useGameTrafficMonitor(options: UseGameTrafficMonitorOptions) {
           }
         });
         trafficMonitorStore.releaseOwner();
+        trafficMonitorStore.markMonitoringStopped();
       }
 
       statusMessage.value = "Stopped";
@@ -347,18 +354,37 @@ export function useGameTrafficMonitor(options: UseGameTrafficMonitorOptions) {
     }
   }
 
+  function canResumeExistingSession(): boolean {
+    const processName = options.getProcessName().trim();
+    return (
+      Boolean(processName) &&
+      trafficMonitorStore.monitoringActive &&
+      trafficMonitorStore.activeProcessName === processName
+    );
+  }
+
+  async function resumeMonitoringIfActive() {
+    if (isMonitoring.value || !canResumeExistingSession()) return;
+
+    initializeAutoCaches();
+    trafficMonitorStore.claimOwner(localOwnerId);
+    try {
+      await beginLocalMonitoringSession();
+    } catch (error) {
+      trafficMonitorStore.releaseOwner();
+      statusMessage.value = `Resume failed: ${parseErrorMessage(error)}`;
+      statusType.value = "error";
+    }
+  }
+
   onUnmounted(() => {
     clearPollingTimer();
-    if (trafficMonitorStore.monitorOwner === localOwnerId && isMonitoring.value) {
+    if (trafficMonitorStore.monitorOwner === localOwnerId) {
       trafficMonitorStore.releaseOwner();
-      void tauriStopMonitoring()
-        .catch((error) => {
-          if (!isNoActiveMonitoringError(error)) {
-            console.warn("[TrafficMonitor] stopMonitoring on unmount failed:", error);
-          }
-        });
     }
   });
+
+  void resumeMonitoringIfActive();
 
   return {
     isMonitoring,

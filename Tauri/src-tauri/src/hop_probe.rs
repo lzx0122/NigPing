@@ -115,7 +115,7 @@ fn sync_ping(
     sync_ping_icmp(target_ip, ttl, timeout_ms)
 }
 
-fn sync_ping_icmp(
+pub(crate) fn sync_ping_icmp(
     target_ip: Ipv4Addr,
     ttl: u8,
     timeout_ms: u32,

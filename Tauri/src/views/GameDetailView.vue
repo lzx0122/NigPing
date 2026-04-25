@@ -46,7 +46,13 @@ const isBusy = computed(
   () => isLoading.value || trafficMonitor.isLoading.value,
 );
 const primaryServerData = computed(() => {
-  const servers = trafficMonitor.detectedServers.value;
+  const gameServers = trafficMonitor.detectedServers.value.filter(
+    (s) => s.is_game_server,
+  );
+  const servers =
+    gameServers.length > 0
+      ? gameServers
+      : trafficMonitor.detectedServers.value;
   if (servers.length === 0) return null;
   return servers.reduce((prev, curr) => {
     const currRate = curr.send_rate + curr.recv_rate;
@@ -55,6 +61,9 @@ const primaryServerData = computed(() => {
   });
 });
 const trafficStatusText = computed(() => {
+  if (trafficMonitor.statusMessage.value) {
+    return trafficMonitor.statusMessage.value;
+  }
   if (trafficMonitor.activityMessage.value) {
     return trafficMonitor.activityMessage.value;
   }

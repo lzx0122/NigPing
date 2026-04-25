@@ -21,6 +21,7 @@ export type DetectedServerPayload = {
   send_rate: number;
   recv_rate: number;
   country: string | null;
+  ping_ms: number | null;
   detected_at: string;
   is_game_server: boolean;
 };

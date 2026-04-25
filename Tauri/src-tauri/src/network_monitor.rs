@@ -11,6 +11,42 @@ const MONITORING_INTERVAL_SECS: u64 = 2;
 const UDP_CACHE_TIMEOUT_SECS: u64 = 30;
 const GEOIP_API_URL: &str = "http://ip-api.com/json/";
 const SNIFFER_RECV_TIMEOUT_MS: u32 = 500;
+const PING_REFRESH_AFTER: Duration = Duration::from_secs(5);
+const PING_SPAWN_TIMEOUT: Duration = Duration::from_millis(1500);
+
+#[derive(Clone, Copy, Debug)]
+enum PingEntry {
+    InFlight,
+    Ready {
+        rtt_ms: Option<u32>,
+        measured_at: Instant,
+    },
+}
+
+fn ping_ms_for_ip(cache: &HashMap<String, PingEntry>, ip: &str) -> Option<u32> {
+    match cache.get(ip) {
+        Some(PingEntry::Ready { rtt_ms, .. }) => *rtt_ms,
+        _ => None,
+    }
+}
+
+fn try_mark_ping_inflight(cache: &mut HashMap<String, PingEntry>, ip: &str, now: Instant) -> bool {
+    match cache.get(ip) {
+        Some(PingEntry::InFlight) => false,
+        Some(PingEntry::Ready { measured_at, .. }) => {
+            if now.duration_since(*measured_at) >= PING_REFRESH_AFTER {
+                cache.insert(ip.to_string(), PingEntry::InFlight);
+                true
+            } else {
+                false
+            }
+        }
+        None => {
+            cache.insert(ip.to_string(), PingEntry::InFlight);
+            true
+        }
+    }
+}
 
 use windows::Win32::NetworkManagement::IpHelper::{
     GetExtendedTcpTable, GetExtendedUdpTable, MIB_TCP_STATE_ESTAB, MIB_TCPTABLE_OWNER_PID,
@@ -30,6 +66,7 @@ pub struct DetectedServer {
     pub send_rate: u64,
     pub recv_rate: u64,
     pub country: Option<String>,
+    pub ping_ms: Option<u32>,
     pub detected_at: String,
     pub is_game_server: bool,
 }
@@ -60,6 +97,7 @@ pub struct MonitorState {
     interesting_ports: Arc<Mutex<HashSet<u16>>>,
     udp_detected_cache: Arc<Mutex<HashMap<String, TrafficStats>>>,
     geo_cache: Arc<Mutex<HashMap<String, Option<String>>>>,
+    ping_cache: Arc<Mutex<HashMap<String, PingEntry>>>,
 }
 
 impl Default for MonitorState {
@@ -73,6 +111,7 @@ impl Default for MonitorState {
             interesting_ports: Arc::new(Mutex::new(HashSet::new())),
             udp_detected_cache: Arc::new(Mutex::new(HashMap::new())),
             geo_cache: Arc::new(Mutex::new(HashMap::new())),
+            ping_cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
@@ -136,13 +175,28 @@ fn is_public_ip(ip: &str) -> bool {
 }
 
 fn get_local_ip() -> Option<Ipv4Addr> {
-    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
-    socket.connect("8.8.8.8:80").ok()?;
-    if let Ok(addr) = socket.local_addr() {
-        if let std::net::SocketAddr::V4(addr_v4) = addr {
-            return Some(*addr_v4.ip());
+    let probe_targets = [
+        "8.8.8.8:80",
+        "1.1.1.1:80",
+        "9.9.9.9:80",
+        "223.5.5.5:80",
+    ];
+
+    for target in probe_targets {
+        let socket = match std::net::UdpSocket::bind("0.0.0.0:0") {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        if socket.connect(target).is_err() {
+            continue;
+        }
+        if let Ok(addr) = socket.local_addr() {
+            if let std::net::SocketAddr::V4(addr_v4) = addr {
+                return Some(*addr_v4.ip());
+            }
         }
     }
+
     None
 }
 
@@ -508,9 +562,10 @@ async fn monitoring_loop(
 
     let mut prev_stats: HashMap<String, (u64, u64)> = HashMap::new();
     let mut last_check = Instant::now();
+    let mut sniffer_started = false;
+    let mut sniffer_warned = false;
 
-    let local_ip = get_local_ip();
-    if let Some(ip) = local_ip {
+    if let Some(ip) = get_local_ip() {
         tracing::debug!(%ip, "local interface for sniffer");
 
         let (interesting_ports, udp_cache) = {
@@ -522,12 +577,13 @@ async fn monitoring_loop(
         };
         let sniffer_cancel = cancel_rx.clone();
 
-        use std::thread;
-        thread::spawn(move || {
+        std::thread::spawn(move || {
             start_sniffer(ip, interesting_ports, udp_cache, sniffer_cancel);
         });
+        sniffer_started = true;
     } else {
-        tracing::warn!("could not determine local IP; UDP sniffing disabled");
+        tracing::warn!("could not determine local IP; UDP sniffing will retry in background");
+        sniffer_warned = true;
     }
 
     loop {
@@ -535,6 +591,30 @@ async fn monitoring_loop(
             _ = interval.tick() => {
                 if *cancel_rx.borrow() {
                     break;
+                }
+
+                if !sniffer_started {
+                    if let Some(ip) = get_local_ip() {
+                        tracing::info!(%ip, "local interface detected later; starting UDP sniffer");
+
+                        let (interesting_ports, udp_cache) = {
+                            let guard = state.lock().await;
+                            (
+                                guard.interesting_ports.clone(),
+                                guard.udp_detected_cache.clone(),
+                            )
+                        };
+                        let sniffer_cancel = cancel_rx.clone();
+
+                        std::thread::spawn(move || {
+                            start_sniffer(ip, interesting_ports, udp_cache, sniffer_cancel);
+                        });
+                        sniffer_started = true;
+                        sniffer_warned = false;
+                    } else if !sniffer_warned {
+                        tracing::warn!("still unable to determine local IP; UDP sniffer not started yet");
+                        sniffer_warned = true;
+                    }
                 }
 
                 let now = Instant::now();
@@ -545,7 +625,7 @@ async fn monitoring_loop(
                     let udp_ports = get_udp_ports(pid);
                     let tcp_ips = get_tcp_remote_ips(pid);
 
-                    let (interesting_ports_arc, udp_detected_cache_arc, geo_cache_arc) = {
+                    let (interesting_ports_arc, udp_detected_cache_arc, geo_cache_arc, ping_cache_arc) = {
                         let mut guard = state.lock().await;
                         let now = Instant::now();
                         for ip in &tcp_ips {
@@ -558,6 +638,7 @@ async fn monitoring_loop(
                             guard.interesting_ports.clone(),
                             guard.udp_detected_cache.clone(),
                             guard.geo_cache.clone(),
+                            guard.ping_cache.clone(),
                         )
                     };
 
@@ -598,6 +679,10 @@ async fn monitoring_loop(
                                     country: {
                                         geo_cache_arc.lock().unwrap().get(&ip).cloned().flatten()
                                     },
+                                    ping_ms: {
+                                        let cache = ping_cache_arc.lock().unwrap();
+                                        ping_ms_for_ip(&cache, &ip)
+                                    },
                                     detected_at: chrono::Local::now().to_rfc3339(),
                                     is_game_server: true,
                                 });
@@ -606,19 +691,20 @@ async fn monitoring_loop(
                         }
                     }
 
-                    let geo_cache = {
+                    let (geo_cache_ref, ping_cache_ref) = {
                         let mut st = state.lock().await;
                         st.detected_servers = detected.clone();
-                        st.geo_cache.clone()
+                        (st.geo_cache.clone(), st.ping_cache.clone())
                     };
 
+                    let now_mono = Instant::now();
                     for server in detected {
                         if !is_public_ip(&server.ip) {
                             continue;
                         }
 
-                        let should_spawn = {
-                            let mut cache = geo_cache.lock().unwrap();
+                        let should_spawn_geo = {
+                            let mut cache = geo_cache_ref.lock().unwrap();
                             if cache.contains_key(&server.ip) {
                                 false
                             } else {
@@ -627,12 +713,47 @@ async fn monitoring_loop(
                             }
                         };
 
-                        if should_spawn {
-                            let cache_clone = geo_cache.clone();
+                        let should_spawn_ping = {
+                            let mut cache = ping_cache_ref.lock().unwrap();
+                            try_mark_ping_inflight(&mut cache, &server.ip, now_mono)
+                        };
+
+                        if should_spawn_geo {
+                            let cache_clone = geo_cache_ref.clone();
                             let ip_clone = server.ip.clone();
                             tokio::spawn(async move {
                                 let loc = resolve_ip_location(&ip_clone).await;
                                 cache_clone.lock().unwrap().insert(ip_clone, loc);
+                            });
+                        }
+
+                        if should_spawn_ping {
+                            let cache_clone = ping_cache_ref.clone();
+                            let ip_clone = server.ip.clone();
+
+                            tokio::spawn(async move {
+                                let measured_at = Instant::now();
+                                let rtt_ms = if let Ok(ip_addr) = ip_clone.parse::<Ipv4Addr>() {
+                                    let join = tokio::task::spawn_blocking(move || {
+                                        match crate::hop_probe::sync_ping_icmp(ip_addr, 128, 1000) {
+                                            Ok(Some((_, rtt))) => Some(rtt),
+                                            _ => None,
+                                        }
+                                    });
+                                    match tokio::time::timeout(PING_SPAWN_TIMEOUT, join).await {
+                                        Ok(Ok(ms)) => ms,
+                                        _ => None,
+                                    }
+                                } else {
+                                    None
+                                };
+                                cache_clone.lock().unwrap().insert(
+                                    ip_clone,
+                                    PingEntry::Ready {
+                                        rtt_ms,
+                                        measured_at,
+                                    },
+                                );
                             });
                         }
                     }
@@ -677,6 +798,7 @@ pub async fn start_monitoring(
     monitor_state.interesting_ports = Arc::new(Mutex::new(HashSet::new()));
     monitor_state.udp_detected_cache = Arc::new(Mutex::new(HashMap::new()));
     monitor_state.geo_cache = Arc::new(Mutex::new(HashMap::new()));
+    monitor_state.ping_cache = Arc::new(Mutex::new(HashMap::new()));
 
     let state_clone = Arc::clone(&state.inner());
 
