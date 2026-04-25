@@ -139,13 +139,23 @@
               viewBox="0 0 100 100"
             >
               <defs>
-                <!-- Upload Gradient (Purple) -->
-                <linearGradient id="gradSend" x1="0" x2="0" y1="0" y2="1">
+                <linearGradient
+                  id="serverDetectGradSend"
+                  x1="0"
+                  x2="0"
+                  y1="0"
+                  y2="1"
+                >
                   <stop offset="0%" stop-color="#a855f7" stop-opacity="0.5" />
                   <stop offset="100%" stop-color="#a855f7" stop-opacity="0" />
                 </linearGradient>
-                <!-- Download Gradient (Cyan) -->
-                <linearGradient id="gradRecv" x1="0" x2="0" y1="0" y2="1">
+                <linearGradient
+                  id="serverDetectGradRecv"
+                  x1="0"
+                  x2="0"
+                  y1="0"
+                  y2="1"
+                >
                   <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.5" />
                   <stop offset="100%" stop-color="#06b6d4" stop-opacity="0" />
                 </linearGradient>
@@ -182,8 +192,7 @@
                 opacity="0.5"
               />
 
-              <!-- Send Rate Area (Bottom layer) -->
-              <path :d="sendPathArea" fill="url(#gradSend)" stroke="none" />
+              <path :d="sendPathArea" fill="url(#serverDetectGradSend)" stroke="none" />
               <path
                 :d="sendPathLine"
                 fill="none"
@@ -192,14 +201,25 @@
                 vector-effect="non-scaling-stroke"
               />
 
-              <!-- Recv Rate Area (Top layer) -->
-              <path :d="recvPathArea" fill="url(#gradRecv)" stroke="none" />
+              <path :d="recvPathArea" fill="url(#serverDetectGradRecv)" stroke="none" />
               <path
                 :d="recvPathLine"
                 fill="none"
                 stroke="#06b6d4"
                 stroke-width="1.5"
                 vector-effect="non-scaling-stroke"
+              />
+              <path
+                v-if="pingPathLine"
+                :d="pingPathLine"
+                fill="none"
+                stroke="#34d399"
+                stroke-width="1.2"
+                stroke-dasharray="2.5 2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                vector-effect="non-scaling-stroke"
+                opacity="0.9"
               />
             </svg>
 
@@ -210,8 +230,21 @@
             </div>
           </div>
 
-          <!-- Bottom Row: Stats Grid (Upload & Download only) -->
-          <div class="grid grid-cols-2 gap-2 pt-1 border-t border-zinc-800/50">
+          <div
+            class="grid grid-cols-3 gap-2 pt-1 border-t border-zinc-800/50"
+          >
+            <div class="flex flex-col">
+              <div class="flex items-center gap-1.5 mb-0.5">
+                <div class="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                <span class="text-[10px] text-zinc-500 uppercase font-bold"
+                  >Ping</span
+                >
+              </div>
+              <span
+                class="text-sm font-mono text-emerald-200 font-semibold tabular-nums"
+                >{{ pingDisplayText }}</span
+              >
+            </div>
             <div class="flex flex-col">
               <div class="flex items-center gap-1.5 mb-0.5">
                 <div class="w-1.5 h-1.5 rounded-full bg-purple-500"></div>
@@ -219,7 +252,7 @@
                   >Upload</span
                 >
               </div>
-              <span class="text-sm font-mono text-purple-200"
+              <span class="text-sm font-mono text-purple-200 font-semibold tabular-nums"
                 >{{ formatBytes(primaryServer.send_rate) }}/s</span
               >
             </div>
@@ -232,7 +265,7 @@
                   >Download</span
                 >
               </div>
-              <span class="text-sm font-mono text-cyan-200"
+              <span class="text-sm font-mono text-cyan-200 font-semibold tabular-nums"
                 >{{ formatBytes(primaryServer.recv_rate) }}/s</span
               >
             </div>
@@ -269,8 +302,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
+import { computed } from "vue";
 import { useGameTrafficMonitor } from "@/composables/useGameTrafficMonitor";
+import { useGameTelemetryChart } from "@/composables/useGameTelemetryChart";
 import {
   Activity,
   Zap,
@@ -311,10 +345,6 @@ const {
   onNewRangeDetected: (ip) => emit("new-range-detected", ip),
 });
 
-const MAX_HISTORY = 60;
-
-const history = ref<any[]>([]);
-
 const sortedServers = computed(() => {
   const udpServers = detectedServers.value.filter((s) => s.is_game_server);
   return udpServers.sort((a, b) => {
@@ -329,17 +359,18 @@ const primaryServer = computed(() => {
   return sortedServers.value[0];
 });
 
-watch(primaryServer, (newVal) => {
-  if (newVal) {
-    history.value.push({
-      time: Date.now(),
-      send: newVal.send_rate,
-      recv: newVal.recv_rate,
-    });
-    if (history.value.length > MAX_HISTORY) {
-      history.value.shift();
-    }
-  }
+const {
+  history,
+  pingDisplayText,
+  sendPathLine,
+  sendPathArea,
+  recvPathLine,
+  recvPathArea,
+  pingPathLine,
+} = useGameTelemetryChart({
+  getGameId: () => props.gameId ?? "default",
+  getPrimary: () => primaryServer.value,
+  getIsTrafficMonitoring: () => isMonitoring.value,
 });
 
 const maxChartValue = computed(() => {
@@ -350,33 +381,6 @@ const maxChartValue = computed(() => {
   );
 });
 
-const sendPathLine = computed(() => createPath("send", false));
-const sendPathArea = computed(() => createPath("send", true));
-const recvPathLine = computed(() => createPath("recv", false));
-const recvPathArea = computed(() => createPath("recv", true));
-
-function createPath(key: "send" | "recv", isArea: boolean) {
-  if (history.value.length < 2) return "";
-
-  const width = 100;
-  const height = 100;
-  const maxVal = maxChartValue.value;
-
-  const points = history.value.map((d, i) => {
-    const x = (i / (history.value.length - 1)) * width;
-    const y = height - (d[key] / maxVal) * height;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  });
-
-  if (isArea) {
-    const firstX = points[0].split(",")[0];
-    const lastX = points[points.length - 1].split(",")[0];
-    return `M ${firstX},${height} L ${points.join(" L ")} L ${lastX},${height} Z`;
-  } else {
-    return `M ${points.join(" L ")}`;
-  }
-}
-
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -386,9 +390,7 @@ function formatBytes(bytes: number): string {
 async function toggleMonitoring() {
   if (isMonitoring.value) {
     await stopMonitoring();
-    history.value = [];
   } else {
-    history.value = [];
     await startMonitoring();
   }
 }
