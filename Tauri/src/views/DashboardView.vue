@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import ServerDetection from "../components/ServerDetection.vue";
+import HopProbe from "../components/HopProbe.vue";
 
 const selectedGameId = ref<string>(GAMES[0]?.id ?? "");
 
@@ -100,6 +101,8 @@ function onNewRangeDetected(ip: string) {
         :known-ranges="knownRanges"
         @new-range-detected="onNewRangeDetected"
       />
+
+      <HopProbe />
     </div>
   </div>
 </template>

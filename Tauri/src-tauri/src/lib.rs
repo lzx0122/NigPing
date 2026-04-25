@@ -1,5 +1,6 @@
 mod dev_monitor;
 mod error;
+mod hop_probe;
 mod network_monitor;
 mod privileges;
 mod service_manager;
@@ -53,6 +54,7 @@ pub fn run() {
             Ok(())
         })
         .manage(Arc::new(Mutex::new(network_monitor::MonitorState::new())))
+        .manage(Arc::new(Mutex::new(hop_probe::HopProbeState::new())))
         .invoke_handler(tauri::generate_handler![
             greet,
             get_device_name,
@@ -63,6 +65,9 @@ pub fn run() {
             network_monitor::get_all_session_ips,
             network_monitor::stop_monitoring,
             network_monitor::add_detected_ip_to_routes,
+            hop_probe::start_hop_probe,
+            hop_probe::stop_hop_probe,
+            hop_probe::get_hop_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -9,6 +9,9 @@ export const TAURI_CMD = {
   getDetectedServers: "get_detected_servers",
   getAllSessionIps: "get_all_session_ips",
   addDetectedIpToRoutes: "add_detected_ip_to_routes",
+  startHopProbe: "start_hop_probe",
+  stopHopProbe: "stop_hop_probe",
+  getHopStats: "get_hop_stats",
 } as const;
 
 export type DetectedServerPayload = {
@@ -57,4 +60,29 @@ export function getAllSessionIps(): Promise<string[]> {
 
 export function addDetectedIpToRoutes(ip: string): Promise<string> {
   return invoke<string>(TAURI_CMD.addDetectedIpToRoutes, { ip });
+}
+
+export type HopStatPayload = {
+  hop: number;
+  ip: string;
+  hostname: string | null;
+  loss_pct: number;
+  sent: number;
+  recv: number;
+  last_ms: number;
+  avg_ms: number;
+  best_ms: number;
+  worst_ms: number;
+};
+
+export function startHopProbe(args: { target: string }): Promise<string> {
+  return invoke<string>(TAURI_CMD.startHopProbe, args);
+}
+
+export function stopHopProbe(): Promise<string> {
+  return invoke<string>(TAURI_CMD.stopHopProbe);
+}
+
+export function getHopStats(): Promise<HopStatPayload[]> {
+  return invoke<HopStatPayload[]>(TAURI_CMD.getHopStats);
 }

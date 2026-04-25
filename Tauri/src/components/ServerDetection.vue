@@ -307,7 +307,7 @@ const {
 } = useGameTrafficMonitor({
   getProcessName: () => props.processName,
   getGameId: () => props.gameId,
-  getKnownRanges: () => props.knownRanges,
+  getKnownRanges: () => props.knownRanges ? Array.from(props.knownRanges) : [],
   onNewRangeDetected: (ip) => emit("new-range-detected", ip),
 });
 

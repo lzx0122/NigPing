@@ -11,8 +11,10 @@ const isLoading = ref(false);
 const currentPing = ref(0);
 const gameIpRanges = ref<string[]>([]);
 const currentGameId = ref<string | null>(null);
-const UDP_DYNAMIC_ONLY_GAMES = new Set<string>();
-const FULL_TUNNEL_TEST_GAMES = new Set<string>();
+
+// Configure game-specific routing behavior here.
+const UDP_DYNAMIC_ONLY_GAMES = new Set<string>([]);
+const FULL_TUNNEL_TEST_GAMES = new Set<string>([]);
 
 export function useWireGuardSession() {
   const vpnStore = useVpnStore();
@@ -44,15 +46,14 @@ export function useWireGuardSession() {
     const useFullTunnelTest = FULL_TUNNEL_TEST_GAMES.has(gameId);
     const useUdpDynamicOnly = UDP_DYNAMIC_ONLY_GAMES.has(gameId);
     const effectiveRanges = [...new Set(gameIpRanges.value)];
-    const routeIps = "0.0.0.0/0";
-    const dnsLine = "DNS = 1.1.1.1\n";
 
-    //     const routeIps = useFullTunnelTest
-    //   ? "0.0.0.0/0"
-    //   : useUdpDynamicOnly
-    //     ? "10.0.0.0/24"
-    //     : effectiveRanges.join(", ") || "10.0.0.0/24";
-    // const dnsLine = useFullTunnelTest ? "DNS = 1.1.1.1\n" : "";
+    const routeIps = useFullTunnelTest
+      ? "0.0.0.0/0"
+      : useUdpDynamicOnly
+        ? "10.0.0.0/24"
+        : effectiveRanges.join(", ") || "10.0.0.0/24";
+
+    const dnsLine = useFullTunnelTest ? "DNS = 1.1.1.1\n" : "";
     return `
 [Interface]
 PrivateKey = ${cfg.privateKey}

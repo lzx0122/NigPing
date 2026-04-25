@@ -39,6 +39,9 @@ windows = { version = "0.58", features = [
 ] }
 # Time utilities
 chrono = "0.4"
+dashmap = "6.1.0"
+# Concurrent state maps
+hickory-resolver = { version = "0.24", features = ["system-config", "tokio"] }
 # Optional: IP geolocation
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 # Device name detection
@@ -48,6 +51,8 @@ thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 sysinfo = "0.38.4"
+socket2 = "0.6.3"
+etherparse = "0.19.0"
 
 [[bin]]
 name = "wg_service"
