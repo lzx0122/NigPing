@@ -3,11 +3,21 @@ import { computed, watch, ref } from "vue";
 import { Activity, Zap } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import ServerGlobe from "@/components/ServerGlobe.vue";
 import GameServerList from "./GameServerList.vue";
 import type { Game, Server } from "@/data/games";
 import type { DetectedServerPayload } from "@/lib/tauriCommands";
 import { useClientGeo } from "@/composables/useClientGeo";
+
+type RoutingMode = "full-tunnel" | "split-tunnel";
 
 const props = defineProps<{
   game: Game;
@@ -26,7 +36,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "update:modelValue", value: Server | null): void;
-  (e: "connect"): void;
+  (e: "connect", value: { mode: RoutingMode }): void;
   (e: "disconnect"): void;
   (e: "new-range-detected", ip: string): void;
 }>();
@@ -53,6 +63,7 @@ const {
 } = useClientGeo();
 
 const gameIpRangesList = computed(() => props.gameIpRanges);
+const showRoutingDialog = ref(false);
 
 const MAX_HISTORY = 60;
 const history = ref<{ send: number; recv: number }[]>([]);
@@ -118,6 +129,11 @@ function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function selectRoutingMode(mode: RoutingMode) {
+  showRoutingDialog.value = false;
+  emit("connect", { mode });
 }
 </script>
 
@@ -384,7 +400,7 @@ function formatBytes(bytes: number) {
           size="lg"
           :disabled="isLoading || !selectedServer"
           class="w-full bg-white text-black hover:bg-zinc-200 border border-transparent font-bold h-14 text-base tracking-wide shadow-lg shadow-zinc-900/50 transition-all active:scale-[0.98]"
-          @click="$emit('connect')"
+          @click="showRoutingDialog = true"
         >
           <span v-if="!isLoading"><slot name="play-icon" /></span>
           <span
@@ -407,4 +423,45 @@ function formatBytes(bytes: number) {
       </div>
     </div>
   </div>
+
+  <Dialog v-model:open="showRoutingDialog">
+    <DialogContent class="sm:max-w-md border-zinc-800 bg-zinc-950 text-zinc-100">
+      <DialogHeader>
+        <DialogTitle>Choose Routing Mode</DialogTitle>
+        <DialogDescription class="text-zinc-400">
+          Full tunnel sends all network traffic through the VPN. Split tunnel only routes game-related traffic through the VPN.
+        </DialogDescription>
+      </DialogHeader>
+
+      <div class="grid gap-3 pt-2">
+        <Button
+          class="h-12 justify-start border border-zinc-700 bg-zinc-900 text-left text-zinc-100 hover:bg-zinc-800"
+          variant="outline"
+          @click="selectRoutingMode('full-tunnel')"
+        >
+          <div class="flex flex-col items-start">
+            <span class="font-semibold">Route everything through VPN</span>
+            <span class="text-xs text-zinc-400">Use this when you want all traffic on this PC to go through the VPN.</span>
+          </div>
+        </Button>
+
+        <Button
+          class="h-12 justify-start border border-zinc-700 bg-zinc-900 text-left text-zinc-100 hover:bg-zinc-800"
+          variant="outline"
+          @click="selectRoutingMode('split-tunnel')"
+        >
+          <div class="flex flex-col items-start">
+            <span class="font-semibold">Split tunnel</span>
+            <span class="text-xs text-zinc-400">Only route the game or selected subnets through the VPN.</span>
+          </div>
+        </Button>
+      </div>
+
+      <DialogFooter class="pt-2">
+        <Button variant="ghost" class="text-zinc-400 hover:text-zinc-100" @click="showRoutingDialog = false">
+          Cancel
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 </template>

@@ -87,7 +87,7 @@ watch(
   },
 );
 
-async function onConnect() {
+async function onConnect(payload: { mode: "full-tunnel" | "split-tunnel" }) {
   if (!selectedServer.value) return;
 
   try {
@@ -99,7 +99,7 @@ async function onConnect() {
       }
     }
 
-    await connect(selectedServer.value);
+    await connect(selectedServer.value, payload.mode);
 
     await trafficMonitor.startMonitoring();
   } catch (error) {

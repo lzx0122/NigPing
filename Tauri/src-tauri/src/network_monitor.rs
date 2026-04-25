@@ -750,6 +750,12 @@ pub async fn add_detected_ip_to_routes(
             ip
         ))));
     }
+
+    if crate::vpn::is_full_tunnel_active() {
+        tracing::debug!(ip = %ip, "full tunnel active; skipping monitor route update");
+        return Ok("Full tunnel active; no extra route needed.".to_string());
+    }
+
     crate::vpn::append_allowed_ip_and_route(&app, &ip)
         .await
         .map_err(|e| to_cmd_err(AppError::Msg(e)))

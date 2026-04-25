@@ -19,6 +19,39 @@ impl Drop for TempConfigGuard {
 // Tunnel interface name (fixed to avoid clashes with other VPN software)
 const INTERFACE_NAME: &str = "PingPalAdapter";
 
+fn route_entry_exists(destination: &str, netmask: &str) -> Result<bool, String> {
+    let output = Command::new("route")
+        .args(["print"])
+        .output()
+        .map_err(|e| format!("failed to inspect route table: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(stdout.lines().any(|line| {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        parts.len() >= 2 && parts[0] == destination && parts[1] == netmask
+    }))
+}
+
+fn full_tunnel_routes_present() -> Result<bool, String> {
+    Ok(route_entry_exists("0.0.0.0", "128.0.0.0")?
+        && route_entry_exists("128.0.0.0", "128.0.0.0")?)
+}
+
+pub fn is_full_tunnel_active() -> bool {
+    match ACTIVE_ROUTES.lock() {
+        Ok(routes) => {
+            let has_first = routes.iter().any(|(network, netmask)| {
+                network == "0.0.0.0" && netmask == "128.0.0.0"
+            });
+            let has_second = routes.iter().any(|(network, netmask)| {
+                network == "128.0.0.0" && netmask == "128.0.0.0"
+            });
+            has_first && has_second
+        }
+        Err(_) => false,
+    }
+}
+
 #[tracing::instrument(level = "info", skip(app, config_content), fields(ipv4_address = %ipv4_address, config_len = config_content.len()))]
 #[tauri::command]
 pub async fn connect_vpn<R: Runtime>(
@@ -310,6 +343,13 @@ pub async fn connect_vpn<R: Runtime>(
                     routes.push((net.to_string(), mask.to_string()));
                 }
             }
+
+            if !full_tunnel_routes_present()? {
+                return Err(
+                    "full-tunnel routes were not installed; check Windows routing privileges and route table state"
+                        .to_string(),
+                );
+            }
         } else {
 
             for ip_cidr in ips {
@@ -404,6 +444,11 @@ pub async fn append_allowed_ip_and_route<R: Runtime>(
     app: &AppHandle<R>,
     ip: &str,
 ) -> Result<String, String> {
+    if is_full_tunnel_active() {
+        tracing::debug!(target = %ip, "full tunnel active; skipping extra route injection");
+        return Ok("Full tunnel active; no extra route needed.".to_string());
+    }
+
     let dump_out = app
         .shell()
         .sidecar("wg-tool")
@@ -461,6 +506,11 @@ pub async fn append_allowed_ip_and_route<R: Runtime>(
 
 /// Add a /32 route for a single IP through the VPN adapter (used by network monitor).
 pub fn add_route_to_vpn(ip: &str) -> Result<String, String> {
+    if is_full_tunnel_active() {
+        tracing::debug!(ip = %ip, "full tunnel active; skipping /32 route");
+        return Ok("Full tunnel active; no extra route needed.".to_string());
+    }
+
     let if_index_output = Command::new("netsh")
         .args(["interface", "ipv4", "show", "interfaces"])
         .output()

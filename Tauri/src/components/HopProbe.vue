@@ -26,10 +26,10 @@ function toggleProbe() {
 }
 
 const getPingColor = (ms: number) => {
-  if (ms === 0) return 'text-zinc-600'; // Initial or timeout
+  if (ms === 0) return 'text-zinc-600';
   if (ms < 50) return 'text-emerald-400 drop-shadow-[0_0_2px_rgba(52,211,153,0.8)]';
   if (ms < 150) return 'text-amber-400 drop-shadow-[0_0_2px_rgba(251,191,36,0.8)]';
-  return 'text-rose-400 drop-shadow-[0_0_2px_rgba(2fb,113,133,0.8)]';
+  return 'text-rose-400 drop-shadow-[0_0_2px_rgba(251,113,133,0.8)]';
 };
 
 const getStatusColor = computed(() => {
@@ -48,7 +48,6 @@ const exportReport = async () => {
   text += `Target: ${targetInput.value} (ICMP)\n`;
   text += `Generated: ${now}\n\n`;
 
-  // Header
   text += `Hop | IP Address      | Loss% | Sent/Recv | Last(ms) | Avg(ms) | Best(ms) | Worst(ms)\n`;
   text += `-------------------------------------------------------------------------------------\n`;
 
@@ -79,7 +78,6 @@ const exportReport = async () => {
 
 <template>
   <div class="probe-container relative flex flex-col gap-4 p-5 rounded-xl bg-zinc-950 border border-zinc-800/80 shadow-2xl overflow-hidden font-sans">
-    <!-- Decorative Grid Background -->
     <div class="absolute inset-0 pointer-events-none grid-pattern opacity-20"></div>
     <div class="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent"></div>
 
@@ -154,9 +152,14 @@ const exportReport = async () => {
                 </div>
               </td>
               <td class="px-4 py-2.5 text-zinc-300">
-                {{ stat.ip }}
+                <div class="flex flex-col">
+                  <span>{{ stat.ip }}</span>
+                  <span v-if="stat.hostname" class="text-[10px] text-zinc-500 overflow-hidden text-ellipsis max-w-[150px]" :title="stat.hostname">
+                    {{ stat.hostname }}
+                  </span>
+                </div>
               </td>
-              <td class="px-4 py-2.5 text-right font-bold w-20" :class="stat.loss_pct > 0 ? 'text-rose-400 drop-shadow-[0_0_4px_rgba(2fb,113,133,0.8)]' : 'text-zinc-600'">
+              <td class="px-4 py-2.5 text-right font-bold w-20" :class="stat.loss_pct > 0 ? 'text-rose-400 drop-shadow-[0_0_4px_rgba(251,113,133,0.8)]' : 'text-zinc-600'">
                 {{ stat.loss_pct.toFixed(0) }}%
               </td>
               <td class="px-4 py-2.5 text-right text-zinc-500">
@@ -218,7 +221,6 @@ const exportReport = async () => {
   scrollbar-width: none;  /* Firefox */
 }
 
-/* Subtle entrance animation for table rows */
 tbody tr {
   animation: fadeIn 0.4s ease-out forwards;
   opacity: 0;

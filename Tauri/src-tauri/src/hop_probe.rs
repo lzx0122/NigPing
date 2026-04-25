@@ -1,7 +1,9 @@
 use dashmap::DashMap;
 use hickory_resolver::TokioAsyncResolver;
 use serde::{Deserialize, Serialize};
+use std::future::Future;
 use std::net::Ipv4Addr;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -21,6 +23,10 @@ const PROBE_INTERVAL_SECS: u64 = 1;
 const MAX_CONCURRENT_PINGS: usize = 8;
 const ICMP_PAYLOAD_SIZE: usize = 32;
 const ICMP_ERROR_BUFFER_SIZE: usize = 8;
+const PTR_TIMEOUT_MS: u64 = 700;
+
+type PtrLookupFuture = Pin<Box<dyn Future<Output = Option<String>> + Send>>;
+type PtrLookupFn = Arc<dyn Fn(Ipv4Addr) -> PtrLookupFuture + Send + Sync>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HopStat {
@@ -166,16 +172,78 @@ fn sync_ping_icmp(
     }
 }
 
-async fn resolve_target(target: &str) -> Option<Ipv4Addr> {
+fn create_resolver() -> Option<TokioAsyncResolver> {
+    TokioAsyncResolver::tokio_from_system_conf().ok()
+}
+
+async fn resolve_target(target: &str, resolver: &TokioAsyncResolver) -> Option<Ipv4Addr> {
     if let Ok(ip) = target.parse::<Ipv4Addr>() {
         return Some(ip);
     }
-    if let Ok(resolver) = TokioAsyncResolver::tokio_from_system_conf() {
-        if let Ok(response) = resolver.ipv4_lookup(target).await {
-            return response.into_iter().next().map(|a| a.0);
+    if let Ok(response) = resolver.ipv4_lookup(target).await {
+        return response.into_iter().next().map(|a| a.0);
+    }
+    None
+}
+
+async fn reverse_resolve_ip(ip: Ipv4Addr, resolver: &TokioAsyncResolver) -> Option<String> {
+    if let Ok(response) = resolver.reverse_lookup(std::net::IpAddr::V4(ip)).await {
+        if let Some(name) = response.into_iter().next() {
+            let mut s = name.to_string();
+            if s.ends_with('.') {
+                s.pop();
+            }
+            return Some(s);
         }
     }
     None
+}
+
+fn schedule_ptr_lookup(
+    ip: Ipv4Addr,
+    ttl: u8,
+    expected_ip: String,
+    hops_map: Arc<DashMap<u8, HopStat>>,
+    session_epoch: Arc<AtomicU64>,
+    session_id: u64,
+    ptr_cache: Arc<DashMap<Ipv4Addr, Option<String>>>,
+    ptr_lookup: PtrLookupFn,
+) {
+    if let Some(cached) = ptr_cache.get(&ip) {
+        if let Some(hostname) = cached.value().clone() {
+            if session_epoch.load(Ordering::SeqCst) == session_id {
+                if let Some(mut stat) = hops_map.get_mut(&ttl) {
+                    if stat.ip == expected_ip {
+                        stat.hostname = Some(hostname);
+                    }
+                }
+            }
+        }
+        return;
+    }
+
+    ptr_cache.insert(ip, None);
+
+    tokio::spawn(async move {
+        let hostname = match time::timeout(Duration::from_millis(PTR_TIMEOUT_MS), (ptr_lookup)(ip)).await {
+            Ok(result) => result,
+            Err(_) => None,
+        };
+
+        if let Some(name) = hostname.clone() {
+            ptr_cache.insert(ip, Some(name));
+        }
+
+        if session_epoch.load(Ordering::SeqCst) == session_id {
+            if let Some(name) = hostname {
+                if let Some(mut stat) = hops_map.get_mut(&ttl) {
+                    if stat.ip == expected_ip {
+                        stat.hostname = Some(name);
+                    }
+                }
+            }
+        }
+    });
 }
 
 async fn ping_worker(
@@ -259,7 +327,10 @@ async fn traceroute_session(
     session_epoch: Arc<AtomicU64>,
     session_id: u64,
     cancel_rx: watch::Receiver<bool>,
+    ptr_lookup: PtrLookupFn,
 ) {
+    let ptr_cache: Arc<DashMap<Ipv4Addr, Option<String>>> = Arc::new(DashMap::new());
+
     for ttl in 1..=MAX_HOPS {
         if !is_session_active(&session_epoch, session_id, &cancel_rx) {
             break;
@@ -285,11 +356,23 @@ async fn traceroute_session(
         }
 
         if let Some(ip) = found_ip {
-            let mut stat = HopStat::new(ttl, ip.to_string());
+            let ip_text = ip.to_string();
+            let mut stat = HopStat::new(ttl, ip_text.clone());
             if let Some(rtt) = found_rtt {
                 stat.update(true, rtt as f64);
             }
             hops_map.insert(ttl, stat);
+
+            schedule_ptr_lookup(
+                ip,
+                ttl,
+                ip_text,
+                hops_map.clone(),
+                session_epoch.clone(),
+                session_id,
+                ptr_cache.clone(),
+                ptr_lookup.clone(),
+            );
 
             let worker_cancel_rx = cancel_rx.clone();
             let worker_map = hops_map.clone();
@@ -322,7 +405,12 @@ async fn traceroute_session(
 
 #[tauri::command]
 pub async fn start_hop_probe(target: String, state: tauri::State<'_, Arc<Mutex<HopProbeState>>>) -> Result<String, String> {
-    let target_ip = match resolve_target(&target).await {
+    let resolver = match create_resolver() {
+        Some(resolver) => Arc::new(resolver),
+        None => return Err("Could not initialize DNS resolver".to_string()),
+    };
+
+    let target_ip = match resolve_target(&target, &resolver).await {
         Some(ip) => ip,
         None => return Err(format!("Could not resolve target: {}", target)),
     };
@@ -345,6 +433,11 @@ pub async fn start_hop_probe(target: String, state: tauri::State<'_, Arc<Mutex<H
     let hops_map = s.hops.clone();
     let ping_limiter = Arc::new(Semaphore::new(MAX_CONCURRENT_PINGS));
     let session_epoch: Arc<AtomicU64> = s.session_epoch.clone();
+    let ptr_resolver = resolver.clone();
+    let ptr_lookup: PtrLookupFn = Arc::new(move |ip: Ipv4Addr| {
+        let ptr_resolver = ptr_resolver.clone();
+        Box::pin(async move { reverse_resolve_ip(ip, &ptr_resolver).await })
+    });
 
     tokio::spawn(async move {
         traceroute_session(
@@ -354,6 +447,7 @@ pub async fn start_hop_probe(target: String, state: tauri::State<'_, Arc<Mutex<H
             session_epoch,
             session_id,
             cancel_rx,
+            ptr_lookup,
         )
         .await;
     });
@@ -395,6 +489,8 @@ pub async fn get_hop_stats(state: tauri::State<'_, Arc<Mutex<HopProbeState>>>) -
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::AtomicUsize;
+    use std::time::Instant;
 
     #[test]
     fn hop_stat_updates_success_metrics() {
@@ -441,5 +537,96 @@ mod tests {
         epoch.store(7, Ordering::SeqCst);
         let _ = tx.send(true);
         assert!(!is_session_active(&epoch, 7, &rx));
+    }
+
+    #[tokio::test]
+    async fn ptr_scheduling_dedups_and_does_not_block_loop_when_lookup_is_slow() {
+        let hops_map: Arc<DashMap<u8, HopStat>> = Arc::new(DashMap::new());
+        let ip = Ipv4Addr::new(1, 1, 1, 1);
+        hops_map.insert(1, HopStat::new(1, ip.to_string()));
+
+        let session_epoch = Arc::new(AtomicU64::new(1));
+        let ptr_cache: Arc<DashMap<Ipv4Addr, Option<String>>> = Arc::new(DashMap::new());
+        let calls = Arc::new(AtomicUsize::new(0));
+
+        let ptr_lookup: PtrLookupFn = {
+            let calls = calls.clone();
+            Arc::new(move |_ip: Ipv4Addr| {
+                let calls = calls.clone();
+                Box::pin(async move {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    time::sleep(Duration::from_millis(PTR_TIMEOUT_MS + 250)).await;
+                    Some("very-slow.ptr.example".to_string())
+                })
+            })
+        };
+
+        let start = Instant::now();
+        for _ in 0..6 {
+            schedule_ptr_lookup(
+                ip,
+                1,
+                ip.to_string(),
+                hops_map.clone(),
+                session_epoch.clone(),
+                1,
+                ptr_cache.clone(),
+                ptr_lookup.clone(),
+            );
+            time::sleep(Duration::from_millis(10)).await;
+        }
+
+        assert!(start.elapsed() < Duration::from_millis(200));
+
+        time::sleep(Duration::from_millis(PTR_TIMEOUT_MS + 120)).await;
+
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert!(ptr_cache.contains_key(&ip));
+        assert!(hops_map.get(&1).and_then(|s| s.hostname.clone()).is_none());
+    }
+
+    #[tokio::test]
+    async fn ptr_scheduling_uses_cache_without_new_lookup() {
+        let hops_map: Arc<DashMap<u8, HopStat>> = Arc::new(DashMap::new());
+        let ip = Ipv4Addr::new(8, 8, 8, 8);
+        hops_map.insert(2, HopStat::new(2, ip.to_string()));
+
+        let session_epoch = Arc::new(AtomicU64::new(9));
+        let ptr_cache: Arc<DashMap<Ipv4Addr, Option<String>>> = Arc::new(DashMap::new());
+        ptr_cache.insert(ip, Some("cached.ptr.example".to_string()));
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let ptr_lookup: PtrLookupFn = {
+            let calls = calls.clone();
+            Arc::new(move |_ip: Ipv4Addr| {
+                let calls = calls.clone();
+                Box::pin(async move {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    Some("should-not-run".to_string())
+                })
+            })
+        };
+
+        schedule_ptr_lookup(
+            ip,
+            2,
+            ip.to_string(),
+            hops_map.clone(),
+            session_epoch,
+            9,
+            ptr_cache,
+            ptr_lookup,
+        );
+
+        time::sleep(Duration::from_millis(20)).await;
+
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            hops_map
+                .get(&2)
+                .and_then(|s| s.hostname.clone())
+                .as_deref(),
+            Some("cached.ptr.example")
+        );
     }
 }

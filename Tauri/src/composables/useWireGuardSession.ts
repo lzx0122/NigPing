@@ -12,7 +12,8 @@ const currentPing = ref(0);
 const gameIpRanges = ref<string[]>([]);
 const currentGameId = ref<string | null>(null);
 
-// Configure game-specific routing behavior here.
+export type RoutingMode = "full-tunnel" | "split-tunnel";
+
 const UDP_DYNAMIC_ONLY_GAMES = new Set<string>([]);
 const FULL_TUNNEL_TEST_GAMES = new Set<string>([]);
 
@@ -32,18 +33,21 @@ export function useWireGuardSession() {
     }
   }
 
-  function getWgConfig(serverConfig: {
+  function getWgConfig(
+    serverConfig: {
     assigned_ip: string;
     server_public_key: string;
     server_endpoint: string;
-  }) {
+    },
+    mode: RoutingMode,
+  ) {
     const cfg = vpnStore.getVpnConfig();
     if (!cfg.privateKey) {
       throw new Error("No VPN configuration found. Please register first.");
     }
 
     const gameId = currentGameId.value ?? "";
-    const useFullTunnelTest = FULL_TUNNEL_TEST_GAMES.has(gameId);
+    const useFullTunnelTest = mode === "full-tunnel" || FULL_TUNNEL_TEST_GAMES.has(gameId);
     const useUdpDynamicOnly = UDP_DYNAMIC_ONLY_GAMES.has(gameId);
     const effectiveRanges = [...new Set(gameIpRanges.value)];
 
@@ -68,7 +72,7 @@ PersistentKeepalive = 25
 `;
   }
 
-  async function connect(selectedServer: Server) {
+  async function connect(selectedServer: Server, mode: RoutingMode = "split-tunnel") {
     const cfg = vpnStore.getVpnConfig();
     if (!cfg.profileId) {
       status.value = "Please register a VPN profile first.";
@@ -84,7 +88,7 @@ PersistentKeepalive = 25
         selectedServer.endpoint.split(":")[0],
       );
 
-      const configContent = getWgConfig(serverConfig);
+      const configContent = getWgConfig(serverConfig, mode);
       const ipv4 = serverConfig.assigned_ip.split("/")[0];
 
       await connectVpn({
